@@ -177,3 +177,75 @@ class ECGBeatDataset(Dataset):
         rr = torch.from_numpy(self.X_rr[idx])  # (6,)
         y = torch.tensor(int(self.y[idx]), dtype=torch.long)
         return ecg, rr, y
+
+
+def build_dataloaders(
+    data_dir: str | Path,
+    *,
+    batch_size: int = 64,
+    seed: int = 42,
+    num_workers: int = 0,
+    pin_memory: bool = False,
+):
+    """Build train/val/test DataLoaders from prepared `.npy` arrays.
+
+    Strict requirements (Week 2)
+    ----------------------------
+    - Patient-wise split using `splits.get_mitbih_splits()` + patient_id.npy
+    - SMOTE ONLY on train
+    - Reproducible order and shuffling (seed)
+
+    Returns
+    -------
+    (train_loader, val_loader, test_loader)
+    """
+
+    from torch.utils.data import DataLoader
+
+    from src.data.splits import get_mitbih_splits
+
+    arr = load_processed_arrays(data_dir)
+    split = make_patient_wise_splits(arr, get_mitbih_splits())
+
+    train_sm = apply_smote_train_only(split["train"], seed=seed, target_ratio=(3, 1, 1))
+
+    train_ds = ECGBeatDataset(train_sm.X_beats, train_sm.X_rr, train_sm.y)
+    val_ds = ECGBeatDataset(split["val"].X_beats, split["val"].X_rr, split["val"].y)
+    test_ds = ECGBeatDataset(split["test"].X_beats, split["test"].X_rr, split["test"].y)
+
+    g = torch.Generator()
+    g.manual_seed(seed)
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=g,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=False,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=max(batch_size, 256),
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=False,
+    )
+    test_loader = DataLoader(
+        test_ds,
+        batch_size=max(batch_size, 256),
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=False,
+    )
+
+    # Smoke checks
+    b = next(iter(train_loader))
+    assert b[0].shape[1:] == (1, 250)
+    assert b[1].shape[1:] == (6,)
+    assert b[2].ndim == 1
+
+    return train_loader, val_loader, test_loader
