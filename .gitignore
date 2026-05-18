@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Envs
+.venv/
+.env
+
+# Data (MIT-BIH is not redistributed)
+data/raw/
+data/processed/
+data/mitbih/*.zip
+
+# Outputs
+models/checkpoints/
+reports/
+logs/
+
+# VSCode (opcional)
+.vscode/
+
+# OS
+.DS_Store
