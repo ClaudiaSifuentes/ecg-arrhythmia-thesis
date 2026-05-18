@@ -1,0 +1,38 @@
+[project]
+name = "ecg-arrhythmia-thesis"
+version = "0.1.0"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "nbconvert[webpdf]>=7.17.1",
+    "neurokit2>=0.2.13",
+    "pyppeteer>=2.0.0",
+]
+
+[tool.poetry]
+name = "ecg-arrhythmia-thesis"
+version = "0.1.0"
+description = "A project for ECG arrhythmia detection using deep learning."
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
+packages = [{ include = "src" }]
+
+# Optional: expose script entry points (works with Poetry)
+[tool.poetry.scripts]
+download-mitbih = "scripts.download_mitbih:main"
+index-mitbih = "scripts.index_mitbih:main"
+report-aami-mitbih = "scripts.report_aami_mitbih:main"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+numpy = "*"
+scipy = "*"
+scikit-learn = "*"
+matplotlib = "*"
+torch = "*"
+wfdb = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+

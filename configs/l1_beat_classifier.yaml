@@ -1,0 +1,30 @@
+model:
+  type: "cnn1d"
+  parameters:
+    num_classes: 3
+    input_size: 250
+    dropout: 0.5
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 50
+
+evaluation:
+  threshold: 0.5
+  min_duration: 5
+
+features:
+  rr_features:
+    include: true
+    parameters:
+      rr_current: true
+      rr_previous: true
+      rr_mean: true
+      sdnn: true
+      rmssd: true
+      rr_ratio: true
+
+logging:
+  log_file: "logs/l1_beat_classifier.log"
+  log_level: "INFO"

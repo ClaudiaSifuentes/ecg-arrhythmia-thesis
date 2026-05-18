@@ -1,0 +1,14 @@
+name: ecg-arrhythmia-thesis
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - numpy
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - pytorch
+  - wfdb
+  - pip
+  - pip:
+    - -r requirements.txt

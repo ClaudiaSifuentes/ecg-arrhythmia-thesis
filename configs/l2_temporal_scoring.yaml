@@ -1,0 +1,8 @@
+SCORE:
+  anomaly_threshold: 0.5
+  window_size: 250
+  overlap: 0.5
+  scoring_method: "mean"
+  min_duration: 5
+  consecutive_vb_threshold: 3
+  score_output: "scores/l2_scores.csv"
