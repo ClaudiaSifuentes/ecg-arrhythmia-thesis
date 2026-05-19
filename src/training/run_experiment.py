@@ -21,10 +21,10 @@ import numpy as np
 import torch
 
 from src.data.torch_datasets import build_dataloaders
-from src.models.fusion_model import FusionClassifier
+from src.models.fusion import FusionClassifier
 from src.training.metrics import compute_metrics
 from src.training.trainer import fit
-from src.utils.seeds import set_seeds
+from src.utils.reproducibility import set_global_seeds
 
 
 @dataclass
@@ -57,10 +57,25 @@ def _count_params(model: torch.nn.Module) -> int:
     return sum(p.numel() for p in model.parameters())
 
 
+def _read_best_from_training_log(log_path: Path) -> tuple[int, float]:
+    if not log_path.exists():
+        return -1, float("inf")
+    import pandas as pd
+
+    df = pd.read_csv(log_path)
+    if df.empty:
+        return -1, float("inf")
+    i = int(df["val_loss"].astype(float).idxmin())
+    best_epoch = int(df.loc[i, "epoch"])
+    best_val_loss = float(df.loc[i, "val_loss"])
+    return best_epoch, best_val_loss
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp_id", type=str, required=True)
     ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--weight_decay", type=float, default=0.0)
     ap.add_argument("--dropout", type=float, default=0.5)
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--max_epochs", type=int, default=50)
@@ -73,7 +88,7 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    set_seeds(42)
+    set_global_seeds(42)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -89,28 +104,30 @@ def main() -> None:
     total_params = _count_params(model)
     assert total_params < 500_000, f"Model too large: {total_params:,} params"
 
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=float(args.lr))
-
     ckpt_dir = Path("models") / "checkpoints"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = ckpt_dir / f"{args.exp_id}_best.pt"
 
-    history = fit(
+    train_log_path = Path("reports") / f"{args.exp_id}_training_log.csv"
+
+    model = fit(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        optimizer=optimizer,
-        criterion=criterion,
-        device=device,
+        lr=float(args.lr),
+        weight_decay=float(args.weight_decay),
         max_epochs=int(args.max_epochs),
         patience=int(args.patience),
         checkpoint_path=str(checkpoint_path),
+        log_path=str(train_log_path),
+        device=device,
     )
 
     # Load best checkpoint (trainer saves best by val_loss)
     if checkpoint_path.exists():
         model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+
+    best_epoch, best_val_loss = _read_best_from_training_log(train_log_path)
 
     # Final VAL metrics (for log + criteria gate)
     model.eval()
@@ -130,12 +147,9 @@ def main() -> None:
 
     y_true = np.asarray(y_true_all, dtype=int)
     y_pred = np.asarray(y_pred_all, dtype=int)
-    y_prob = np.concatenate(y_prob_all, axis=0)
+    y_prob = np.concatenate(y_prob_all, axis=0) if y_prob_all else np.zeros((0, 3))
 
     m = compute_metrics(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
-
-    best_epoch = int(history.get("best_epoch", -1))
-    best_val_loss = float(history.get("best_val_loss", float("inf")))
 
     result = ExperimentResult(
         exp_id=str(args.exp_id),
@@ -144,8 +158,8 @@ def main() -> None:
         dropout=float(args.dropout),
         batch_size=int(args.batch),
         max_epochs=int(args.max_epochs),
-        best_epoch=best_epoch,
-        best_val_loss=best_val_loss,
+        best_epoch=int(best_epoch),
+        best_val_loss=float(best_val_loss),
         val_f1_macro=float(m["f1_macro"]),
         val_recall_veb=float(m["recall_veb"]),
         val_specificity_veb=float(m["specificity_veb"]),

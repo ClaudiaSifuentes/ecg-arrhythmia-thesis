@@ -58,6 +58,7 @@ def fit(
     train_loader,
     val_loader,
     lr=1e-3,
+    weight_decay: float = 0.0,
     max_epochs=100,
     patience=15,
     lr_patience=7,
@@ -78,7 +79,7 @@ def fit(
 
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode="min",
