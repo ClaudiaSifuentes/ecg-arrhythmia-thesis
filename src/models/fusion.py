@@ -41,8 +41,9 @@ class FusionClassifier(nn.Module):
     Total: ~158k params, safely under the 500k constraint.
     """
 
-    def __init__(self, dropout: float = 0.5, n_classes: int = 3):
+    def __init__(self, dropout: float = 0.5, n_classes: int = 3, use_rr: bool = True):
         super().__init__()
+        self.use_rr = use_rr
         self.cnn = ECGFeatureExtractor()
 
         self.head = nn.Sequential(
@@ -64,5 +65,7 @@ class FusionClassifier(nn.Module):
         """
 
         h = self.cnn(ecg)  # (B, 256)
+        if not self.use_rr:
+            rr = torch.zeros_like(rr)
         z = torch.cat([h, rr], dim=1)  # (B, 262)
         return self.head(z)  # (B, 3)

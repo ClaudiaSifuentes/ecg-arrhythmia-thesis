@@ -69,3 +69,38 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray) 
         "auc_macro": auc,
         "report_str": report_str,
     }
+
+
+def heuristic_rr_baseline(X_rr: np.ndarray, y_true: np.ndarray, *, low: float = 0.7, high: float = 1.5) -> dict:
+    """Heuristic baseline using only RR_ratio.
+
+    Rule (user-specified):
+    - if RR_ratio < 0.7 or > 1.5 => predict VEB (class 2)
+    - else => predict N (class 0)
+
+    Notes
+    -----
+    - This baseline intentionally never predicts SVEB.
+    - Assumes RR_ratio is the last column of X_rr (shape: (N, 6)).
+    """
+
+    X_rr = np.asarray(X_rr)
+    y_true = np.asarray(y_true)
+    assert X_rr.ndim == 2 and X_rr.shape[1] == 6, f"Expected X_rr (N,6), got {X_rr.shape}"
+
+    rr_ratio = X_rr[:, -1]
+    pred_is_veb = (rr_ratio < low) | (rr_ratio > high)
+    y_pred = np.where(pred_is_veb, 2, 0).astype(int)
+
+    report_str = classification_report(
+        y_true,
+        y_pred,
+        target_names=["N", "SVEB", "VEB"],
+        zero_division=0,
+    )
+
+    return {
+        "y_pred": y_pred,
+        "report_str": report_str,
+        "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+    }
