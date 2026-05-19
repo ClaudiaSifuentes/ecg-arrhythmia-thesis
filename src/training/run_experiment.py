@@ -81,6 +81,8 @@ def main() -> None:
     ap.add_argument("--max_epochs", type=int, default=50)
     ap.add_argument("--patience", type=int, default=8)
     ap.add_argument("--notes", type=str, default="")
+    ap.add_argument("--use_rr", action="store_true", default=True)
+    ap.add_argument("--no_rr", dest="use_rr", action="store_false")
     ap.add_argument(
         "--data_dir",
         type=str,
@@ -100,7 +102,7 @@ def main() -> None:
         pin_memory=(device.type == "cuda"),
     )
 
-    model = FusionClassifier(dropout=float(args.dropout)).to(device)
+    model = FusionClassifier(dropout=float(args.dropout), use_rr=args.use_rr).to(device)
     total_params = _count_params(model)
     assert total_params < 500_000, f"Model too large: {total_params:,} params"
 
@@ -167,7 +169,7 @@ def main() -> None:
         checkpoint_path=str(checkpoint_path),
     )
 
-    print("\n=== E01 RESULTS ===")
+    print(f"\n=== {args.exp_id} RESULTS ===")
     print(f"exp_id: {result.exp_id}")
     print(f"device: {device}")
     print(f"params: {total_params:,}")
