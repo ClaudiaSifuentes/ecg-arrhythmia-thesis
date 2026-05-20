@@ -24,7 +24,13 @@ from typing import List, Sequence
 #      Only 59 annotated beats in ~30 minutes — insufficient for training.
 # 217: sustained ventricular tachycardia with extremely variable wide QRS.
 #      Detector yields ~5x more detections than annotated beats.
-EXCLUDED_RECORDS: List[str] = ["102", "104", "107", "217"]
+EXCLUDED_RECORDS: List[str] = ["102", "104", "107", "217", "232", "209"]
+# Justificación clínica:
+# 232: bigeminismo auricular sostenido — 1,380 SVEB (50.5% de todos los SVEB
+#      del dataset). Outlier estadístico extremo que distorsiona la CV.
+# 209: 383 SVEB (14% del total). Combinado con 232 concentran el 64% de SVEB
+#      en 2 de 44 pacientes, causando varianza inter-fold no representativa.
+
 
 # Explicit patient-wise splits (MIT-BIH record IDs)
 TRAIN_PATIENTS: List[str] = [
