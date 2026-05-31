@@ -66,6 +66,7 @@ def fit(
     checkpoint_path="models/checkpoints/best_model.pt",
     log_path="reports/training_log.csv",
     device=None,
+    class_weights=None,
 ):
     """Full training loop with EarlyStopping + ReduceLROnPlateau + Checkpoint.
 
