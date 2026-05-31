@@ -88,6 +88,7 @@ def main() -> None:
         type=str,
         default=str(Path("data") / "processed" / "mitbih_aami3"),
     )
+    ap.add_argument("--class_weights", nargs=3, type=float, default=[1.0, 1.0, 1.0], metavar=('W_N', 'W_SVEB', 'W_VEB'), help="Loss weights per class [N SVEB VEB]")
     args = ap.parse_args()
 
     set_global_seeds(42)
@@ -116,6 +117,7 @@ def main() -> None:
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
+        class_weights=args.class_weights,
         lr=float(args.lr),
         weight_decay=float(args.weight_decay),
         max_epochs=int(args.max_epochs),

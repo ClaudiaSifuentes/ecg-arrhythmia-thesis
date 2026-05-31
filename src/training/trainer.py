@@ -78,7 +78,8 @@ def fit(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = model.to(device)
-    criterion = nn.CrossEntropyLoss()
+    weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
+    criterion = nn.CrossEntropyLoss(weight=weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
