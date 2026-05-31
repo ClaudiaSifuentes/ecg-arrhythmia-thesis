@@ -247,13 +247,28 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default="data/processed/mitbih_aami3")
     ap.add_argument("--n_splits", type=int, default=5)
-    ap.add_argument("--no_rr", dest="use_rr", action="store_false", default=True)
+    ap.add_argument("--lr", type=float, default=5e-4)
+    ap.add_argument("--dropout", type=float, default=0.5)
+    ap.add_argument("--batch_size", type=int, default=256)
+    ap.add_argument("--weight_decay", type=float, default=1e-4)
+    ap.add_argument("--max_epochs", type=int, default=80)
+    ap.add_argument("--patience", type=int, default=15)
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--use_rr", dest="use_rr", action="store_true", default=True)
+    ap.add_argument("--no_rr", dest="use_rr", action="store_false")
     ap.add_argument("--log_path", type=str, default="reports/cv_results.csv")
     args = ap.parse_args()
 
     cross_validate_patient_wise(
         data_dir=args.data_dir,
         n_splits=args.n_splits,
+        lr=args.lr,
+        dropout=args.dropout,
+        batch_size=args.batch_size,
+        weight_decay=args.weight_decay,
+        max_epochs=args.max_epochs,
+        patience=args.patience,
+        seed=args.seed,
         use_rr=args.use_rr,
         log_path=args.log_path,
     )
