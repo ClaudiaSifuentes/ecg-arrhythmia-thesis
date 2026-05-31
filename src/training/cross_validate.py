@@ -61,6 +61,8 @@ def cross_validate_patient_wise(
     use_rr: bool = True,
     device: Optional[torch.device] = None,
     log_path: str | Path = "reports/cv_results.csv",
+    exclude_patients: list[str] = None,
+    notes: str = "",
 ) -> list[FoldResult]:
     """Run patient-wise stratified k-fold cross-validation.
 
@@ -82,6 +84,10 @@ def cross_validate_patient_wise(
         Torch device. Auto-detected (CUDA > CPU) if None.
     log_path:
         CSV path for per-fold results.
+    exclude_patients:
+        List of patient IDs to exclude from training/evaluation (for ablation studies).
+    notes:
+        Optional notes for this CV run (saved to log file).
 
     Returns
     -------
@@ -99,6 +105,14 @@ def cross_validate_patient_wise(
     X_rr = arr.X_rr          # (N, 6)
     y = arr.y                # (N,)
     patient_ids = arr.patient_id  # (N,) string patient IDs
+
+    # --- Exclude patients if requested ---
+    if exclude_patients:
+        mask = ~np.isin(patient_ids, exclude_patients)
+        X_beats = X_beats[mask]
+        X_rr = X_rr[mask]
+        y = y[mask]
+        patient_ids = patient_ids[mask]
 
     # --- CV splitter ---
     skf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
@@ -257,7 +271,13 @@ if __name__ == "__main__":
     ap.add_argument("--use_rr", dest="use_rr", action="store_true", default=True)
     ap.add_argument("--no_rr", dest="use_rr", action="store_false")
     ap.add_argument("--log_path", type=str, default="reports/cv_results.csv")
+    ap.add_argument("--exclude_patients", type=str, default=None, help="Comma-separated patient IDs to exclude (e.g., '232,104')")
+    ap.add_argument("--notes", type=str, default="", help="Optional notes for this run")
     args = ap.parse_args()
+
+    exclude_patients = []
+    if args.exclude_patients:
+        exclude_patients = [p.strip() for p in args.exclude_patients.split(",")]
 
     cross_validate_patient_wise(
         data_dir=args.data_dir,
@@ -271,4 +291,6 @@ if __name__ == "__main__":
         seed=args.seed,
         use_rr=args.use_rr,
         log_path=args.log_path,
+        exclude_patients=exclude_patients,
+        notes=args.notes,
     )
