@@ -6,14 +6,20 @@ from src.models.fusion import FusionClassifier
 from src.data.torch_datasets import build_dataloaders
 from src.data.splits import VAL_PATIENTS
 from src.utils.reproducibility import set_global_seeds
+import argparse
 
 set_global_seeds(42)
+
+# Argument parser
+parser = argparse.ArgumentParser(description='SVEB Threshold Tuning')
+parser.add_argument('--checkpoint', type=str, default='models/checkpoints/E06_best.pt',
+                    help='Path to the model checkpoint file')
+args = parser.parse_args()
 
 # Cargar modelo
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model  = FusionClassifier()
-model.load_state_dict(torch.load('models/checkpoints/E06_best.pt',
-                                  map_location=device))
+model.load_state_dict(torch.load(args.checkpoint, map_location=device))
 model.to(device)
 model.eval()
 
