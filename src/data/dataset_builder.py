@@ -42,7 +42,7 @@ import wfdb
 
 from .aami_mapping import map_symbol_to_aami_class
 from .mitbih_dataset import MITBIHDataset, PRE_SAMPLES, POST_SAMPLES
-from .preprocessing import apply_bandpass
+from .preprocessing import apply_bandpass, resample_signal
 from .rpeaks import detect_r_peaks
 from .rr_features import extract_rr_features
 from .splits import EXCLUDED_RECORDS, filter_excluded
@@ -121,18 +121,32 @@ def _collect_record(
     ds = MITBIHDataset(record_id, sampling_rate=fs)
     ds.load_data()  # loads signal + annotations
 
-    # 1) bandpass filter on raw signal (prior to peak detection)
-    x_f = apply_bandpass(ds.ecg_data, fs=fs)
+    # 1) resample if needed
+    x = ds.ecg_data
+    if fs != 360:
+        x = resample_signal(x, fs, 360)
+        fs_used = 360
+    else:
+        fs_used = fs
 
-    # 2) R-peak detection (neurokit2 default is set in rpeaks.py)
-    det_peaks = detect_r_peaks(x_f, fs=fs, method="neurokit")
+    # 2) bandpass filter on raw signal (prior to peak detection)
+    x_f = apply_bandpass(x, fs=fs_used)
 
-    # 3) Build segments/labels using annotated peaks and AAMI mapping
+    # 3) R-peak detection (neurokit2 default is set in rpeaks.py)
+    det_peaks = detect_r_peaks(x_f, fs=fs_used, method="neurokit")
+
+    # 4) Build segments/labels using annotated peaks and AAMI mapping
     #    We reproduce the logic explicitly here so we also collect the annotation
     #    samples that were actually kept.
     ann = wfdb.rdann(record_id, "atr")
     ann_samples = np.asarray(ann.sample, dtype=int)
     ann_symbols = np.asarray(ann.symbol)
+
+    # IMPORTANT: if the source fs != 360, annotation sample indices are in the
+    # original sampling grid, but we detect peaks after resampling to 360.
+    # Convert annotation indices to 360Hz before any windowing/matching.
+    if fs != 360 and ann_samples.size > 0:
+        ann_samples = np.asarray(np.round(ann_samples * (360.0 / float(fs))), dtype=int)
 
     segments: List[np.ndarray] = []
     y: List[int] = []
@@ -161,13 +175,13 @@ def _collect_record(
     y_beats = np.asarray(y, dtype=np.int64)
     kept_ann_samples_arr = np.asarray(kept_ann_samples, dtype=int)
 
-    # 4) RR features from detected peaks, then pick rows aligned to beats
-    X_rr_all = extract_rr_features(det_peaks, fs=fs)
+    # 5) RR features from detected peaks, then pick rows aligned to beats
+    X_rr_all = extract_rr_features(det_peaks, fs=fs_used)
 
     matched_det_idx = _match_annotations_to_detected(
         kept_ann_samples_arr,
         det_peaks,
-        fs=fs,
+        fs=fs_used,
         tolerance_ms=tolerance_ms,
         strict=False,
     )
@@ -194,85 +208,189 @@ def _collect_record(
     return X_beats, X_rr, y_beats, patient_ids
 
 
-def build_dataset(data_dir: str, records: list, output_dir: str) -> Dict[str, str]:
-    """Pipeline completo: MIT-BIH -> 4 archivos .npy listos para entrenamiento.
+def build_dataset(sources: list[dict], output_dir: str) -> Dict[str, str]:
+    """Build a combined dataset from multiple WFDB sources.
 
-    Parameters
-    ----------
-    data_dir:
-        Directory containing MIT-BIH records (e.g. data/raw/mitdb).
-    records:
-        List of record ids to process.
-        NOTE: patient-wise split is applied by choosing which records to pass.
-    output_dir:
-        Where to store the `.npy` exports.
+    sources = [
+        {'name': 'mit', 'data_dir': 'data/raw/mitdb', 'records': [...], 'fs': 360},
+        {'name': 'inc', 'data_dir': 'data/raw/incartdb', 'records': [...], 'fs': 257},
+    ]
 
-    Returns
-    -------
-    dict with paths for: X_beats, X_rr, y_beats, patient_id
+    Notes
+    -----
+    - Each source is processed independently; arrays are concatenated at the end.
+    - If fs != 360, resample happens inside _collect_record (already implemented).
+    - patient_id is prefixed with '{name}_' to keep sources separable.
     """
 
-    data_dir = str(data_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Apply excluded record policy
-    records_in = [str(r) for r in records]
-    records_ok = filter_excluded(records_in)
-
-    if len(records_ok) < len(records_in):
-        dropped = sorted(set(records_in) - set(records_ok))
-        print(f"[dataset_builder] Dropping excluded records: {dropped} (policy in splits.py)")
 
     X_beats_all: List[np.ndarray] = []
     X_rr_all: List[np.ndarray] = []
     y_all: List[np.ndarray] = []
     pid_all: List[np.ndarray] = []
 
-    old_cwd = os.getcwd()
-    try:
-        os.chdir(data_dir)  # WFDB local read compatibility
+    for src in sources:
+        name = str(src.get('name', 'src'))
+        data_dir = str(src['data_dir'])
+        records = [str(r) for r in src['records']]
+        fs = int(src.get('fs', 360))
 
-        for rec in records_ok:
-            xb, xr, y, pid = _collect_record(rec)
-            X_beats_all.append(xb)
-            X_rr_all.append(xr)
-            y_all.append(y)
-            pid_all.append(pid)
+        # Apply excluded-record policy only for MIT-BIH sources
+        if name.startswith('mit'):
+            records_ok = filter_excluded(records)
+        else:
+            records_ok = records
 
-    finally:
-        os.chdir(old_cwd)
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(data_dir)
+            for rec in records_ok:
+                xb, xr, yb, pid = _collect_record(rec, fs=fs)
+                pid = np.asarray([f"{name}_{p}" for p in pid], dtype=pid.dtype)
+                X_beats_all.append(xb)
+                X_rr_all.append(xr)
+                y_all.append(yb)
+                pid_all.append(pid)
+        finally:
+            os.chdir(old_cwd)
 
     X_beats = np.concatenate(X_beats_all, axis=0) if X_beats_all else np.zeros((0, 250), dtype=np.float32)
     X_rr = np.concatenate(X_rr_all, axis=0) if X_rr_all else np.zeros((0, 6), dtype=np.float32)
     y_beats = np.concatenate(y_all, axis=0) if y_all else np.zeros((0,), dtype=np.int64)
-    patient_id = np.concatenate(pid_all, axis=0) if pid_all else np.zeros((0,), dtype="<U8")
+    patient_id = np.concatenate(pid_all, axis=0) if pid_all else np.zeros((0,), dtype='<U16')
 
-    # 6) SMOTE train-only is intentionally NOT applied here.
-    # Reason: this builder exports raw arrays. SMOTE should be applied in the
-    # training dataloader to avoid accidental leakage into val/test.
-
-    # 7) Export
-    p_xb = output_dir / "X_beats.npy"
-    p_xr = output_dir / "X_rr.npy"
-    p_y = output_dir / "y_beats.npy"
-    p_pid = output_dir / "patient_id.npy"
+    p_xb = output_dir / 'X_beats.npy'
+    p_xr = output_dir / 'X_rr.npy'
+    p_y = output_dir / 'y_beats.npy'
+    p_pid = output_dir / 'patient_id.npy'
 
     np.save(p_xb, X_beats)
     np.save(p_xr, X_rr)
     np.save(p_y, y_beats)
     np.save(p_pid, patient_id)
 
-    # Final verification requested
     assert X_beats.shape[1] == 250
     assert X_rr.shape[1] == 6
     assert X_beats.shape[0] == X_rr.shape[0] == len(y_beats) == len(patient_id)
     assert not np.any(np.isnan(X_rr))
-    print("✅ Pipeline OK — listo para entrenamiento")
+
+    print('✅ Combined dataset built successfully')
 
     return {
-        "X_beats": str(p_xb),
-        "X_rr": str(p_xr),
-        "y_beats": str(p_y),
-        "patient_id": str(p_pid),
+        'X_beats': str(p_xb),
+        'X_rr': str(p_xr),
+        'y_beats': str(p_y),
+        'patient_id': str(p_pid),
     }
+
+
+def build_dataset_multi_source(*, output_dir: str = "data/processed/mitbih_incart") -> Dict[str, str]:
+    """Build combined processed dataset: MIT-BIH (train/val/test as before) + INCART (train-only).
+
+    Spec (user)
+    -----------
+    - INCART: 64 clean records go to train (val/test remain MIT-BIH only).
+    - Patient IDs are prefixed with `mit_` and `inc_`.
+    - Writes arrays to `data/processed/mitbih_incart/`.
+    - Prints summary:
+      * Total beats + per-class counts/%
+      * SVEB from INCART vs MIT-BIH
+      * Total patients in train/val/test
+
+    Notes
+    -----
+    - This function does not modify nor depend on any existing `build_dataset()` behavior.
+    - Output dataset is the *concatenation* (train+val+test) for downstream code that
+      already uses explicit patient-wise lists from `splits.py`.
+    """
+
+    from collections import Counter
+
+    # Local imports to avoid changing module-level imports/behavior
+    from .splits import TRAIN_PATIENTS, VAL_PATIENTS, TEST_PATIENTS
+
+    INCART_EXCLUDE = {"I08", "I09", "I12", "I29", "I30", "I32", "I38", "I39", "I57", "I58", "I62"}
+    INCART_ALL = [f"I{idx:02d}" for idx in range(1, 76)]  # INCART has I01..I75
+    incart_records = [r for r in INCART_ALL if r not in INCART_EXCLUDE]
+
+    mit_records = [str(r) for r in (list(TRAIN_PATIENTS) + list(VAL_PATIENTS) + list(TEST_PATIENTS))]
+
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    Xb_parts: List[np.ndarray] = []
+    Xr_parts: List[np.ndarray] = []
+    y_parts: List[np.ndarray] = []
+    pid_parts: List[np.ndarray] = []
+
+    def _append_source(*, name: str, data_dir: str, records: Sequence[str], fs: int) -> None:
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(data_dir)
+            for rec in records:
+                xb, xr, yb, pid = _collect_record(str(rec), fs=fs)
+                pid = np.asarray([f"{name}_{p}" for p in pid], dtype="<U16")
+                Xb_parts.append(xb)
+                Xr_parts.append(xr)
+                y_parts.append(yb)
+                pid_parts.append(pid)
+        finally:
+            os.chdir(old_cwd)
+
+    # MIT-BIH (fs=360) + INCART (fs=257)
+    _append_source(name="mit", data_dir="data/raw/mitdb", records=mit_records, fs=360)
+    _append_source(name="inc", data_dir="data/raw/incartdb", records=incart_records, fs=257)
+
+    X_beats = np.concatenate(Xb_parts, axis=0)
+    X_rr = np.concatenate(Xr_parts, axis=0)
+    y_beats = np.concatenate(y_parts, axis=0)
+    patient_id = np.concatenate(pid_parts, axis=0)
+
+    p_xb = out_dir / "X_beats.npy"
+    p_xr = out_dir / "X_rr.npy"
+    p_y = out_dir / "y_beats.npy"
+    p_pid = out_dir / "patient_id.npy"
+
+    np.save(p_xb, X_beats)
+    np.save(p_xr, X_rr)
+    np.save(p_y, y_beats)
+    np.save(p_pid, patient_id)
+
+    # Sanity checks
+    assert X_beats.shape[1] == 250
+    assert X_rr.shape[1] == 6
+    assert X_beats.shape[0] == X_rr.shape[0] == len(y_beats) == len(patient_id)
+
+    # --- Required prints ---
+    total_beats = int(len(y_beats))
+    c = Counter(y_beats.tolist())
+
+    def _fmt(cls_id: int, name: str) -> str:
+        n = int(c.get(cls_id, 0))
+        pct = 100.0 * n / total_beats if total_beats else 0.0
+        return f"{name}={n} ({pct:.2f}%)"
+
+    print("Total beats:", total_beats)
+    print(_fmt(0, "N"), _fmt(1, "SVEB"), _fmt(2, "VEB"))
+
+    is_inc = np.char.startswith(patient_id.astype(str), "inc_")
+    is_mit = np.char.startswith(patient_id.astype(str), "mit_")
+    s_from_inc = int(((y_beats == 1) & is_inc).sum())
+    s_from_mit = int(((y_beats == 1) & is_mit).sum())
+    print(f"SVEB desde INCART: {s_from_inc}")
+    print(f"SVEB desde MIT-BIH: {s_from_mit}")
+
+    # Patient counts by split policy (INCART all train)
+    train_pats = {f"mit_{p}" for p in TRAIN_PATIENTS} | {f"inc_{r}" for r in incart_records}
+    val_pats = {f"mit_{p}" for p in VAL_PATIENTS}
+    test_pats = {f"mit_{p}" for p in TEST_PATIENTS}
+
+    print(f"Total pacientes en train: {len(train_pats)}")
+    print(f"Total pacientes en val: {len(val_pats)}")
+    print(f"Total pacientes en test: {len(test_pats)}")
+
+    print("✅ Combined dataset (MIT-BIH+INCART) built successfully")
+
+    return {"X_beats": str(p_xb), "X_rr": str(p_xr), "y_beats": str(p_y), "patient_id": str(p_pid)}

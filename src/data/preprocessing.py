@@ -1,5 +1,7 @@
 import numpy as np
 import wfdb
+from scipy.signal import resample_poly
+from math import gcd
 import os
 
 # Window definition (samples) for beat segmentation centered on R-peak
@@ -7,6 +9,22 @@ PRE_SAMPLES = 100
 POST_SAMPLES = 150
 WINDOW_SIZE = PRE_SAMPLES + POST_SAMPLES
 
+def resample_signal(signal: np.ndarray, 
+                    fs_orig: int, 
+                    fs_target: int = 360) -> np.ndarray:
+    """
+    Resample signal from fs_orig to fs_target Hz.
+    Uses polyphase filtering (resample_poly) — better than resample()
+    for ECG because preserves morphology without ringing.
+    
+    Example: INCART 257Hz → MIT-BIH 360Hz
+    """
+    if fs_orig == fs_target:
+        return signal
+    g   = gcd(fs_orig, fs_target)
+    up  = fs_target // g   # 360 // gcd(257,360)
+    dn  = fs_orig   // g   # 257 // gcd(257,360)
+    return resample_poly(signal, up, dn)
 
 def apply_bandpass(ecg_signal: np.ndarray, fs: int = 360, low_hz: float = 0.5, high_hz: float = 40.0, order: int = 2) -> np.ndarray:
     """Bandpass filter for ECG preprocessing (baseline wander + high-frequency noise).

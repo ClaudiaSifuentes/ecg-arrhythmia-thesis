@@ -29,6 +29,7 @@ import numpy as np
 import pandas as pd
 import wfdb
 from scipy.signal import find_peaks
+from src.data.preprocessing import resample_signal
 
 
 def select_best_channel(signal_2d: np.ndarray, fs: int = 360) -> tuple[np.ndarray, int]:
@@ -382,7 +383,9 @@ def validate_all_records(data_dir: str | os.PathLike, records_list: Sequence[str
     }
 
     data_dir = str(data_dir)
-    out_csv = Path("reports") / "eda" / "tables" / "rpeaks_metrics.csv"
+
+    out_name = os.environ.get("RPEAKS_OUT_CSV", "rpeaks_metrics.csv")
+    out_csv = Path("reports") / "eda" / "tables" / out_name
     out_csv.parent.mkdir(parents=True, exist_ok=True)
 
     rows: List[dict] = []
@@ -393,7 +396,15 @@ def validate_all_records(data_dir: str | os.PathLike, records_list: Sequence[str
 
         for rec in records_list:
             record = wfdb.rdrecord(str(rec))
-            sig_raw, best_ch = select_best_channel(record.p_signal, fs=360)
+            fs_orig = int(getattr(record, "fs", 360) or 360)
+
+            # Select best channel at original fs
+            sig_raw, best_ch = select_best_channel(record.p_signal, fs=fs_orig)
+
+            # If not 360Hz, resample signal to 360Hz and scale annotations accordingly
+            if fs_orig != 360:
+                sig_raw = resample_signal(sig_raw, fs_orig=fs_orig, fs_target=360)
+
             sig = normalize_polarity(sig_raw)
 
             # Diagnostics for CSV
@@ -410,6 +421,10 @@ def validate_all_records(data_dir: str | os.PathLike, records_list: Sequence[str
             keep = np.array([str(s) in ANNOT_MAP for s in ann_symbols], dtype=bool)
             annotated = ann_samples[keep]
 
+            # Resample annotation sample indices when fs_orig != 360
+            if fs_orig != 360 and annotated.size > 0:
+                annotated = np.asarray(np.round(annotated * (360.0 / fs_orig)), dtype=int)
+
             detected = detect_r_peaks(
                 sig,
                 fs=360,
@@ -424,6 +439,7 @@ def validate_all_records(data_dir: str | os.PathLike, records_list: Sequence[str
                     "record_id": str(rec),
                     "best_ch": int(best_ch),
                     "best_ch_name": best_ch_name,
+                    "fs_orig": fs_orig,
                     "p2_raw": round(p2_raw, 3),
                     "p98_raw": round(p98_raw, 3),
                     "flipped": bool(flipped),

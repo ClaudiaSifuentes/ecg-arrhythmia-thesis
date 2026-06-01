@@ -73,6 +73,22 @@ VAL_PATIENTS: List[str] = ["215", "219", "220", "221", "222", "223"]
 TEST_PATIENTS: List[str] = ["228", "230", "231", "232", "233", "234"]
 
 
+# --- INCART record lists (fs=257Hz) ---
+# NOTE: INCART record names are typically like 'I01', 'I02', ... depending on WFDB package.
+# We keep them separate from MIT-BIH splits to avoid cross-dataset leakage.
+INCART_EXCLUDED: List[str] = []
+
+# Placeholder splits: user should adjust after verifying available records.
+# By default: use all INCART records as train (no val/test) until you define splits.
+INCART_TRAIN_RECORDS: List[str] = []
+INCART_VAL_RECORDS: List[str] = []
+INCART_TEST_RECORDS: List[str] = []
+
+# Combined lists for convenience
+MITBIH_ALL_RECORDS: List[str] = list(TRAIN_PATIENTS) + list(VAL_PATIENTS) + list(TEST_PATIENTS)
+INCART_ALL_RECORDS: List[str] = list(INCART_TRAIN_RECORDS) + list(INCART_VAL_RECORDS) + list(INCART_TEST_RECORDS)
+
+
 @dataclass(frozen=True)
 class PatientSplits:
     train: List[str]
@@ -100,4 +116,9 @@ def filter_excluded(records: Sequence[str]) -> List[str]:
     """Convenience helper to drop excluded records from a given record list."""
 
     excl = set(EXCLUDED_RECORDS)
+    return [str(r) for r in records if str(r) not in excl]
+
+
+def filter_incart_excluded(records: Sequence[str]) -> List[str]:
+    excl = set(INCART_EXCLUDED)
     return [str(r) for r in records if str(r) not in excl]
