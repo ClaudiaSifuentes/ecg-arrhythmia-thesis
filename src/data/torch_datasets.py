@@ -56,12 +56,25 @@ def load_processed_arrays(processed_dir: str | Path) -> SplitArrays:
 
 
 def make_patient_wise_splits(arr: SplitArrays, splits) -> Dict[str, SplitArrays]:
-    """Create patient-wise splits using the provided record id lists."""
+    """Create patient-wise splits using the provided record id lists.
 
-    pid = np.asarray(arr.patient_id)
-    train_mask = np.isin(pid, np.asarray(splits.train))
-    val_mask = np.isin(pid, np.asarray(splits.val))
-    test_mask = np.isin(pid, np.asarray(splits.test))
+    Supports datasets where `patient_id` is prefixed (e.g. `mit_100`, `inc_I01`).
+    - MIT-BIH samples are matched after stripping `mit_`.
+    - INCART samples (`inc_`) are forced into train.
+    """
+
+    pid = np.asarray(arr.patient_id).astype(str)
+
+    # Normalize ids for matching against MIT-BIH split lists
+    pid_norm = pid.copy()
+    pid_norm = np.char.replace(pid_norm, "mit_", "")
+    pid_norm = np.char.replace(pid_norm, "inc_", "")
+
+    is_inc = np.char.startswith(pid, "inc_")
+
+    train_mask = np.isin(pid_norm, np.asarray(splits.train)) | is_inc
+    val_mask = np.isin(pid_norm, np.asarray(splits.val))
+    test_mask = np.isin(pid_norm, np.asarray(splits.test))
 
     def _sub(mask: np.ndarray) -> SplitArrays:
         return SplitArrays(
