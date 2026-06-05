@@ -1,8 +1,7 @@
-"""Model comparison: E10 (CNN Fusion) vs SVM, RF, XGBoost.
+"""Ablation study: E10 vs baselines using ONLY X_rr (6 RR features).
 
-Reproducible baseline comparison with identical data splits and preprocessing.
-Metrics: Accuracy, F1_macro, Recall_VEB, Precision_VEB, Specificity_VEB.
-Results saved to reports/model_comparison.csv
+Compares with compare_models.py which uses combined X_beats + X_rr (256 features).
+Results saved to reports/model_comparison_ablation_rr_only.csv
 """
 
 from __future__ import annotations
@@ -22,13 +21,12 @@ from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     accuracy_score, f1_score, recall_score, precision_score,
-    confusion_matrix, roc_auc_score
+    roc_auc_score
 )
 
-from src.data.torch_datasets import build_dataloaders, load_processed_arrays, make_patient_wise_splits
+from src.data.torch_datasets import load_processed_arrays, make_patient_wise_splits
 from src.data.splits import get_mitbih_splits
 from src.models.fusion import FusionClassifier
-from src.training.metrics import compute_metrics
 from src.utils.reproducibility import set_global_seeds
 
 
@@ -38,7 +36,7 @@ def _ensure_comparison_log(path: Path) -> None:
         return
     with path.open("w", newline="") as f:
         fieldnames = [
-            "timestamp", "model", "accuracy", "f1_macro", "recall_veb",
+            "timestamp", "model", "feature_set", "accuracy", "f1_macro", "recall_veb",
             "precision_veb", "specificity_veb", "roc_auc", "notes"
         ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -50,7 +48,6 @@ def _load_e10_model(checkpoint_path: Path | str, device: str = "cpu") -> nn.Modu
     model = FusionClassifier(dropout=0.5)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Handle both direct state_dict and checkpoint wrapper
     if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
         model.load_state_dict(checkpoint["model_state_dict"])
     else:
@@ -63,12 +60,7 @@ def _load_e10_model(checkpoint_path: Path | str, device: str = "cpu") -> nn.Modu
 
 def _get_predictions_cnn(model: nn.Module, X_beats: np.ndarray, X_rr: np.ndarray,
                          batch_size: int = 256, device: str = "cpu") -> Tuple[np.ndarray, np.ndarray]:
-    """Get hard predictions and probability scores from CNN model.
-    
-    Returns
-    -------
-    (y_pred, y_score): hard predictions and softmax probabilities
-    """
+    """Get hard predictions and probability scores from CNN model."""
     model.eval()
     all_preds = []
     all_probs = []
@@ -76,8 +68,8 @@ def _get_predictions_cnn(model: nn.Module, X_beats: np.ndarray, X_rr: np.ndarray
     with torch.no_grad():
         for i in range(0, len(X_beats), batch_size):
             b_end = min(i + batch_size, len(X_beats))
-            beats = torch.from_numpy(X_beats[i:b_end]).unsqueeze(1).to(device)  # (B, 1, 250)
-            rr = torch.from_numpy(X_rr[i:b_end]).to(device)  # (B, 6)
+            beats = torch.from_numpy(X_beats[i:b_end]).unsqueeze(1).to(device)
+            rr = torch.from_numpy(X_rr[i:b_end]).to(device)
             
             logits = model(beats, rr)
             probs = torch.softmax(logits, dim=1)
@@ -89,32 +81,19 @@ def _get_predictions_cnn(model: nn.Module, X_beats: np.ndarray, X_rr: np.ndarray
 
 
 def _compute_clinical_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_score: np.ndarray = None) -> Dict[str, float]:
-    """Compute clinical metrics (VEB-centric).
-    
-    Parameters
-    ----------
-    y_true : array-like, shape (n_samples,)
-        True labels
-    y_pred : array-like, shape (n_samples,)
-        Hard predictions
-    y_score : array-like, shape (n_samples, n_classes), optional
-        Probability scores from model (for ROC-AUC)
-    """
+    """Compute clinical metrics (VEB-centric)."""
     acc = float(accuracy_score(y_true, y_pred))
     f1_macro = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
     
-    # VEB-specific metrics (class 2)
     recall_veb = float(recall_score(y_true, y_pred, labels=[2], average="micro", zero_division=0))
     precision_veb = float(precision_score(y_true, y_pred, labels=[2], average="micro", zero_division=0))
     
-    # Specificity for VEB (true negative rate): P(pred≠2 | true≠2)
     y_true_binary = (y_true == 2).astype(int)
     y_pred_binary = (y_pred == 2).astype(int)
     tn = int(((y_true_binary == 0) & (y_pred_binary == 0)).sum())
     fp = int(((y_true_binary == 0) & (y_pred_binary == 1)).sum())
     specificity_veb = float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0
     
-    # ROC-AUC (one-vs-rest, macro average) — requires probability scores
     roc_auc = 0.0
     if y_score is not None:
         try:
@@ -132,23 +111,23 @@ def _compute_clinical_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_score: n
     }
 
 
-def compare_models(
+def compare_models_ablation(
     data_dir: str = "data/processed/mitbih_incart",
-    checkpoint_e10: str = "models/E10_best.pt",
-    output_csv: str = "reports/model_comparison.csv",
+    checkpoint_e10: str = "models/checkpoints/E10_best.pt",
+    output_csv: str = "reports/model_comparison_ablation_rr_only.csv",
     seed: int = 42,
     device: str = "cpu",
 ) -> None:
-    """Compare E10 (CNN) vs SVM, RF, XGBoost on test set."""
+    """Compare E10 (CNN, uses X_beats+X_rr) vs baselines using ONLY X_rr (6 features)."""
     
     set_global_seeds(seed)
     _ensure_comparison_log(Path(output_csv))
     
     print("=" * 80)
-    print("MODEL COMPARISON: E10 (CNN) vs Baselines")
+    print("ABLATION STUDY: E10 (full) vs Baselines (X_rr only)")
     print("=" * 80)
     
-    # Load data with reproducible splits
+    # Load data
     print("\n[1/5] Loading data with patient-wise splits...")
     arr = load_processed_arrays(data_dir)
     splits = make_patient_wise_splits(arr, get_mitbih_splits())
@@ -163,63 +142,57 @@ def compare_models(
     
     print(f"  Train: {len(y_train)} beats")
     print(f"  Test:  {len(y_test)} beats")
-    print(f"  Classes: {np.unique(y_test)}")
     
-    # Concatenate beats + RR features for sklearn models
-    X_train_combined = np.concatenate([X_train_beats, X_train_rr], axis=1)
-    X_test_combined = np.concatenate([X_test_beats, X_test_rr], axis=1)
+    # For ablation: use ONLY RR features (6 features)
+    X_train_rr_only = X_train_rr
+    X_test_rr_only = X_test_rr
     
-    # Standardize features for sklearn
     scaler = StandardScaler()
-    X_train_combined = scaler.fit_transform(X_train_combined)
-    X_test_combined = scaler.transform(X_test_combined)
+    X_train_rr_scaled = scaler.fit_transform(X_train_rr_only)
+    X_test_rr_scaled = scaler.transform(X_test_rr_only)
     
-    # === E10 (CNN Fusion) ===
-    print("\n[2/5] Evaluating E10 (CNN Fusion)...")
-    print("  Features: X_beats (250 temporal samples) + X_rr (6 RR features) — late fusion")
+    # === E10 (CNN Fusion) — uses X_beats + X_rr ===
+    print("\n[2/5] Evaluating E10 (CNN Fusion, uses X_beats + X_rr)...")
     try:
         model_e10 = _load_e10_model(checkpoint_e10, device=device)
         y_pred_e10, y_score_e10 = _get_predictions_cnn(model_e10, X_test_beats, X_test_rr, device=device)
         metrics_e10 = _compute_clinical_metrics(y_test, y_pred_e10, y_score_e10)
-        print(f"  ✓ E10 loaded and evaluated")
-        print(f"    F1_macro: {metrics_e10['f1_macro']:.4f}, Recall_VEB: {metrics_e10['recall_veb']:.4f}, ROC-AUC: {metrics_e10['roc_auc']:.4f}")
+        print(f"  ✓ E10 loaded and evaluated (using 250 beats + 6 RR features)")
+        print(f"    F1_macro: {metrics_e10['f1_macro']:.4f}, Recall_VEB: {metrics_e10['recall_veb']:.4f}")
     except Exception as e:
         print(f"  ✗ E10 failed: {e}")
         metrics_e10 = {k: 0.0 for k in ["accuracy", "f1_macro", "recall_veb", "precision_veb", "specificity_veb", "roc_auc"]}
     
-    # === SVM ===
-    print("\n[3/5] Training SVM...")
-    print(f"  Features: X_combined (250 beats + 6 RR = 256 total) — standardized")
+    # === SVM (X_rr only) ===
+    print("\n[3/5] Training SVM (X_rr only, 6 features)...")
     try:
         svm = SVC(kernel="rbf", C=1.0, gamma="scale", random_state=seed, verbose=0, probability=True)
-        svm.fit(X_train_combined, y_train)
-        y_pred_svm = svm.predict(X_test_combined)
-        y_score_svm = svm.predict_proba(X_test_combined)
+        svm.fit(X_train_rr_scaled, y_train)
+        y_pred_svm = svm.predict(X_test_rr_scaled)
+        y_score_svm = svm.predict_proba(X_test_rr_scaled)
         metrics_svm = _compute_clinical_metrics(y_test, y_pred_svm, y_score_svm)
         print(f"  ✓ SVM trained")
-        print(f"    F1_macro: {metrics_svm['f1_macro']:.4f}, Recall_VEB: {metrics_svm['recall_veb']:.4f}, ROC-AUC: {metrics_svm['roc_auc']:.4f}")
+        print(f"    F1_macro: {metrics_svm['f1_macro']:.4f}, Recall_VEB: {metrics_svm['recall_veb']:.4f}")
     except Exception as e:
         print(f"  ✗ SVM failed: {e}")
         metrics_svm = {k: 0.0 for k in ["accuracy", "f1_macro", "recall_veb", "precision_veb", "specificity_veb", "roc_auc"]}
     
-    # === Random Forest ===
-    print("\n[4/5] Training Random Forest...")
-    print(f"  Features: X_combined (250 beats + 6 RR = 256 total)")
+    # === Random Forest (X_rr only) ===
+    print("\n[4/5] Training Random Forest (X_rr only, 6 features)...")
     try:
         rf = RandomForestClassifier(n_estimators=100, max_depth=20, random_state=seed, n_jobs=-1, verbose=0)
-        rf.fit(X_train_combined, y_train)
-        y_pred_rf = rf.predict(X_test_combined)
-        y_score_rf = rf.predict_proba(X_test_combined)
+        rf.fit(X_train_rr_scaled, y_train)
+        y_pred_rf = rf.predict(X_test_rr_scaled)
+        y_score_rf = rf.predict_proba(X_test_rr_scaled)
         metrics_rf = _compute_clinical_metrics(y_test, y_pred_rf, y_score_rf)
         print(f"  ✓ Random Forest trained")
-        print(f"    F1_macro: {metrics_rf['f1_macro']:.4f}, Recall_VEB: {metrics_rf['recall_veb']:.4f}, ROC-AUC: {metrics_rf['roc_auc']:.4f}")
+        print(f"    F1_macro: {metrics_rf['f1_macro']:.4f}, Recall_VEB: {metrics_rf['recall_veb']:.4f}")
     except Exception as e:
         print(f"  ✗ Random Forest failed: {e}")
         metrics_rf = {k: 0.0 for k in ["accuracy", "f1_macro", "recall_veb", "precision_veb", "specificity_veb", "roc_auc"]}
     
-    # === XGBoost ===
-    print("\n[5/5] Training XGBoost...")
-    print(f"  Features: X_combined (250 beats + 6 RR = 256 total)")
+    # === XGBoost (X_rr only) ===
+    print("\n[5/5] Training XGBoost (X_rr only, 6 features)...")
     try:
         xgb = XGBClassifier(
             n_estimators=100,
@@ -229,67 +202,67 @@ def compare_models(
             verbosity=0,
             eval_metric="mlogloss"
         )
-        xgb.fit(X_train_combined, y_train, verbose=False)
-        y_pred_xgb = xgb.predict(X_test_combined)
-        y_score_xgb = xgb.predict_proba(X_test_combined)
+        xgb.fit(X_train_rr_scaled, y_train, verbose=False)
+        y_pred_xgb = xgb.predict(X_test_rr_scaled)
+        y_score_xgb = xgb.predict_proba(X_test_rr_scaled)
         metrics_xgb = _compute_clinical_metrics(y_test, y_pred_xgb, y_score_xgb)
         print(f"  ✓ XGBoost trained")
-        print(f"    F1_macro: {metrics_xgb['f1_macro']:.4f}, Recall_VEB: {metrics_xgb['recall_veb']:.4f}, ROC-AUC: {metrics_xgb['roc_auc']:.4f}")
+        print(f"    F1_macro: {metrics_xgb['f1_macro']:.4f}, Recall_VEB: {metrics_xgb['recall_veb']:.4f}")
     except Exception as e:
         print(f"  ✗ XGBoost failed: {e}")
         metrics_xgb = {k: 0.0 for k in ["accuracy", "f1_macro", "recall_veb", "precision_veb", "specificity_veb", "roc_auc"]}
     
     # === Log results ===
     print("\n" + "=" * 80)
-    print("RESULTS SUMMARY")
+    print("ABLATION RESULTS SUMMARY")
     print("=" * 80)
     
     results = [
-        ("E10 (CNN Fusion)", metrics_e10),
-        ("SVM", metrics_svm),
-        ("Random Forest", metrics_rf),
-        ("XGBoost", metrics_xgb),
+        ("E10 (CNN Fusion)", "X_beats (250) + X_rr (6)", metrics_e10),
+        ("SVM", "X_rr only (6)", metrics_svm),
+        ("Random Forest", "X_rr only (6)", metrics_rf),
+        ("XGBoost", "X_rr only (6)", metrics_xgb),
     ]
     
     timestamp = datetime.now().isoformat()
     with open(output_csv, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "timestamp", "model", "accuracy", "f1_macro", "recall_veb",
+            "timestamp", "model", "feature_set", "accuracy", "f1_macro", "recall_veb",
             "precision_veb", "specificity_veb", "roc_auc", "notes"
         ])
         
-        for model_name, metrics in results:
+        for model_name, feature_set, metrics in results:
             row = {
                 "timestamp": timestamp,
                 "model": model_name,
+                "feature_set": feature_set,
                 **{k: f"{v:.6f}" for k, v in metrics.items()},
-                "notes": "mitbih_incart_test_split",
+                "notes": "ablation_rr_only_vs_e10_full",
             }
             writer.writerow(row)
             
-            # Print table row
-            print(f"\n{model_name:20} | Acc: {metrics['accuracy']:.4f} | F1: {metrics['f1_macro']:.4f} | "
-                  f"Recall_VEB: {metrics['recall_veb']:.4f} | Prec_VEB: {metrics['precision_veb']:.4f} | "
-                  f"Spec_VEB: {metrics['specificity_veb']:.4f} | ROC-AUC: {metrics['roc_auc']:.4f}")
+            print(f"\n{model_name:20} | Features: {feature_set:25}")
+            print(f"  Acc: {metrics['accuracy']:.4f} | F1: {metrics['f1_macro']:.4f} | "
+                  f"Recall_VEB: {metrics['recall_veb']:.4f} | Prec_VEB: {metrics['precision_veb']:.4f}")
     
-    print("\n✅ Results saved to:", output_csv)
-    print("\nNOTE: All baseline models (SVM, RF, XGBoost) use COMBINED features: X_beats (250) + X_rr (6) = 256 total")
-    print("      For ablation studies, see scripts/compare_models_ablation.py")
+    print("\n✅ Ablation results saved to:", output_csv)
+    print("\nKEY INSIGHT: Compare E10 (256 features) vs baselines (6 features)")
+    print("             Difference shows value of learning temporal morphology from X_beats")
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Compare E10 (CNN) vs baseline models")
+    ap = argparse.ArgumentParser(description="Ablation study: E10 (full) vs baselines (X_rr only)")
     ap.add_argument("--data_dir", type=str, default="data/processed/mitbih_incart",
                     help="Path to processed dataset")
     ap.add_argument("--checkpoint", type=str, default="models/checkpoints/E10_best.pt",
                     help="Path to E10 checkpoint")
-    ap.add_argument("--output_csv", type=str, default="reports/model_comparison.csv",
+    ap.add_argument("--output_csv", type=str, default="reports/model_comparison_ablation_rr_only.csv",
                     help="Output CSV file")
     ap.add_argument("--seed", type=int, default=42, help="Random seed")
     ap.add_argument("--device", type=str, default="cpu", help="Device (cpu or cuda)")
     args = ap.parse_args()
     
-    compare_models(
+    compare_models_ablation(
         data_dir=args.data_dir,
         checkpoint_e10=args.checkpoint,
         output_csv=args.output_csv,
