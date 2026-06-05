@@ -97,7 +97,7 @@ def _compute_clinical_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_score: n
     roc_auc = 0.0
     if y_score is not None:
         try:
-            roc_auc = float(roc_auc_score(y_true, y_score, multi_class="ovr", average="macro", zero_division=0))
+            roc_auc = float(roc_auc_score(y_true, y_score, multi_class="ovr", average="macro"))
         except Exception as e:
             print(f"    [Warning] ROC-AUC computation failed: {e}")
     
