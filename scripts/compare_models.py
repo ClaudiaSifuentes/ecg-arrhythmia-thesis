@@ -248,7 +248,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Compare E10 (CNN) vs baseline models")
     ap.add_argument("--data_dir", type=str, default="data/processed/mitbih_incart",
                     help="Path to processed dataset")
-    ap.add_argument("--checkpoint", type=str, default="models/E10_best.pt",
+    ap.add_argument("--checkpoint", type=str, default="models/checkpoints/E10_best.pt",
                     help="Path to E10 checkpoint")
     ap.add_argument("--output_csv", type=str, default="reports/model_comparison.csv",
                     help="Output CSV file")
