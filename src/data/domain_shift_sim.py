@@ -124,9 +124,20 @@ def simulate_polar_h10_degradation(
     contact_typical_snr_db: float = 28.0,
     contact_severe_snr_db: float = 15.0,
 ) -> np.ndarray:
-    """Apply the degradation chain to a batch of (N, 250) beat windows, then
-    re-normalize per-window (z-score) to match the original preprocessing
-    (Section IV.A.2).
+    """Apply the degradation chain to a batch of (N, 250) beat windows.
+
+    Does NOT re-normalize per window afterward. The real preprocessing
+    (src/data/dataset_builder.py) z-scores each full record ONCE, before
+    slicing out 250-sample beat windows -- so a window's local amplitude
+    (std) is not 1.0 by construction, it reflects the beat's actual
+    deflection size relative to the record. VEB beats have a mean std of
+    1.27 vs. 0.96 for N in this corpus (measured on X_beats.npy) -- this is
+    real morphological signal, not noise. An earlier version of this
+    function forcibly re-z-scored each output window to std=1, which erased
+    that amplitude cue and caused a large, spurious VEB recall drop even
+    with all degradation parameters set to their off-values. Do not add
+    that step back without re-deriving it from the real per-record
+    normalization.
 
     `apply_resample=False` and/or zeroing individual noise parameters
     (baseline_amplitude=0, motion_prob=0, contact_artifact_prob=0 with
@@ -150,6 +161,4 @@ def simulate_polar_h10_degradation(
         )
         degraded[i] = w
 
-    mu = degraded.mean(axis=-1, keepdims=True)
-    sd = degraded.std(axis=-1, keepdims=True) + 1e-8
-    return ((degraded - mu) / sd).astype(np.float32)
+    return degraded.astype(np.float32)
