@@ -54,10 +54,10 @@ def evaluate_test_with_outlier_breakdown(model, data_dir, device) -> dict:
     keep = pid_norm != OUTLIER_RECORD
 
     report_full = classification_report(
-        test.y, y_pred, target_names=["N", "SVEB", "VEB"], output_dict=True, zero_division=0
+        test.y, y_pred, labels=[0, 1, 2], target_names=["N", "SVEB", "VEB"], output_dict=True, zero_division=0
     )
     report_excl = classification_report(
-        test.y[keep], y_pred[keep], target_names=["N", "SVEB", "VEB"], output_dict=True, zero_division=0
+        test.y[keep], y_pred[keep], labels=[0, 1, 2], target_names=["N", "SVEB", "VEB"], output_dict=True, zero_division=0
     )
 
     return {
