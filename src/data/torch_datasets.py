@@ -199,13 +199,15 @@ def build_dataloaders(
     seed: int = 42,
     num_workers: int = 0,
     pin_memory: bool = False,
+    use_smote: bool = True,
+    smote_target_ratio: Tuple[int, int, int] = (3, 1, 1),
 ):
     """Build train/val/test DataLoaders from prepared `.npy` arrays.
 
     Strict requirements (Week 2)
     ----------------------------
     - Patient-wise split using `splits.get_mitbih_splits()` + patient_id.npy
-    - SMOTE ONLY on train
+    - SMOTE ONLY on train (toggle via `use_smote`, ratio via `smote_target_ratio`)
     - Reproducible order and shuffling (seed)
 
     Returns
@@ -220,7 +222,10 @@ def build_dataloaders(
     arr = load_processed_arrays(data_dir)
     split = make_patient_wise_splits(arr, get_mitbih_splits())
 
-    train_sm = apply_smote_train_only(split["train"], seed=seed, target_ratio=(3, 1, 1))
+    if use_smote:
+        train_sm = apply_smote_train_only(split["train"], seed=seed, target_ratio=smote_target_ratio)
+    else:
+        train_sm = split["train"]
 
     train_ds = ECGBeatDataset(train_sm.X_beats, train_sm.X_rr, train_sm.y)
     val_ds = ECGBeatDataset(split["val"].X_beats, split["val"].X_rr, split["val"].y)

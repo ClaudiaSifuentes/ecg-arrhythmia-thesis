@@ -22,6 +22,12 @@ import torch
 
 from src.data.torch_datasets import build_dataloaders
 from src.models.fusion import FusionClassifier
+from src.training.eval_report import (
+    append_test_comparison_row,
+    evaluate_test_with_outlier_breakdown,
+    print_outlier_breakdown,
+)
+from src.training.losses import FocalLoss
 from src.training.metrics import compute_metrics
 from src.training.trainer import fit
 from src.utils.reproducibility import set_global_seeds
@@ -89,18 +95,24 @@ def main() -> None:
         default=str(Path("data") / "processed" / "mitbih_aami3"),
     )
     ap.add_argument("--class_weights", nargs=3, type=float, default=[1.0, 1.0, 1.0], metavar=('W_N', 'W_SVEB', 'W_VEB'), help="Loss weights per class [N SVEB VEB]")
+    ap.add_argument("--loss", choices=["ce", "focal"], default="ce", help="ce = weighted CrossEntropy (default); focal = Focal Loss")
+    ap.add_argument("--focal_gamma", type=float, default=2.0, help="Focal loss focusing parameter (only used with --loss focal)")
+    ap.add_argument("--no_smote", dest="use_smote", action="store_false", default=True, help="Disable SMOTE oversampling on train (tests whether synthetic SVEB beats explain the test-set generalization gap)")
+    ap.add_argument("--smote_ratio", nargs=3, type=int, default=[3, 1, 1], metavar=("R_N", "R_SVEB", "R_VEB"), help="Target N:SVEB:VEB ratio for SMOTE (ignored if --no_smote)")
     args = ap.parse_args()
 
     set_global_seeds(42)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_loader, val_loader, test_loader = build_dataloaders(
+    train_loader, val_loader, _ = build_dataloaders(
         Path(args.data_dir),
         batch_size=int(args.batch),
         seed=42,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
+        use_smote=args.use_smote,
+        smote_target_ratio=tuple(args.smote_ratio),
     )
 
     model = FusionClassifier(dropout=float(args.dropout), use_rr=args.use_rr).to(device)
@@ -113,11 +125,14 @@ def main() -> None:
 
     train_log_path = Path("reports") / f"{args.exp_id}_training_log.csv"
 
+    criterion = FocalLoss(gamma=float(args.focal_gamma), alpha=args.class_weights) if args.loss == "focal" else None
+
     model = fit(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         class_weights=args.class_weights,
+        criterion=criterion,
         lr=float(args.lr),
         weight_decay=float(args.weight_decay),
         max_epochs=int(args.max_epochs),
@@ -188,6 +203,18 @@ def main() -> None:
     with log_path.open("a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(asdict(result).keys()))
         writer.writerow(asdict(result))
+
+    # Test-set evaluation with explicit record-232 breakdown (R3 reviewer concern:
+    # is a SVEB improvement real generalization, or does it only move the outlier?)
+    test_report = evaluate_test_with_outlier_breakdown(model, args.data_dir, device)
+    print_outlier_breakdown(test_report)
+    append_test_comparison_row(
+        Path("reports") / "test_comparison.csv",
+        exp_id=str(args.exp_id),
+        timestamp=result.timestamp,
+        notes=str(args.notes),
+        test_report=test_report,
+    )
 
 
 if __name__ == "__main__":

@@ -67,20 +67,27 @@ def fit(
     log_path="reports/training_log.csv",
     device=None,
     class_weights=None,
+    criterion=None,
 ):
     """Full training loop with EarlyStopping + ReduceLROnPlateau + Checkpoint.
 
     Metric monitored: val_loss (lower is better).
     Saves best model weights to `checkpoint_path`.
     Logs per-epoch metrics to `log_path` (CSV).
+
+    `criterion`: pass an instantiated loss module (e.g. FocalLoss) to override
+    the default weighted CrossEntropyLoss built from `class_weights`.
     """
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = model.to(device)
-    weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    if criterion is None:
+        weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
+        criterion = nn.CrossEntropyLoss(weight=weights)
+    else:
+        criterion = criterion.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
