@@ -106,3 +106,37 @@ def heuristic_rr_baseline(X_rr: np.ndarray, y_true: np.ndarray, *, low: float = 
         "report_str": report_str,
         "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
     }
+
+CLASS_NAMES = ("N", "SVEB", "VEB")
+
+
+def class_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray | None = None) -> dict:
+    """Flat dict with Se / PPV / F1 per ectopic class, F1-macro and AUC.
+
+    Se (sensitivity) = recall, PPV (positive predictive value) = precision,
+    both one-vs-rest, as in AAMI EC57 reporting. PPV is undefined when the
+    class is never predicted; it is reported as NaN rather than 0 so means
+    across folds are not silently dragged down by an undefined value.
+    """
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    out = {
+        "n": int(len(y_true)),
+        "f1_macro": float(f1_score(y_true, y_pred, labels=[0, 1, 2], average="macro", zero_division=0)),
+    }
+    for c, name in ((1, "sveb"), (2, "veb")):
+        tp = int(((y_true == c) & (y_pred == c)).sum())
+        fp = int(((y_true != c) & (y_pred == c)).sum())
+        fn = int(((y_true == c) & (y_pred != c)).sum())
+        se = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
+        ppv = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
+        f1 = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else float("nan")
+        out.update({f"{name}_n": tp + fn, f"{name}_se": se, f"{name}_ppv": ppv, f"{name}_f1": f1})
+    if y_prob is not None:
+        y_bin = label_binarize(y_true, classes=[0, 1, 2])
+        try:
+            out["auc_macro"] = float(roc_auc_score(y_bin, y_prob, average="macro", multi_class="ovr"))
+        except ValueError:
+            out["auc_macro"] = float("nan")
+    return out

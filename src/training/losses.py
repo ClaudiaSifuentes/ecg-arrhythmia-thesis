@@ -15,9 +15,10 @@ import torch.nn.functional as F
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, gamma: float = 2.0, alpha=None, reduction: str = "mean"):
+    def __init__(self, gamma: float = 2.0, alpha=None, reduction: str = "mean", label_smoothing: float = 0.0):
         super().__init__()
         self.gamma = gamma
+        self.label_smoothing = float(label_smoothing)
         self.reduction = reduction
         if alpha is not None:
             self.register_buffer("alpha", torch.as_tensor(alpha, dtype=torch.float32))
@@ -26,10 +27,18 @@ class FocalLoss(nn.Module):
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         log_probs = F.log_softmax(logits, dim=1)
-        log_pt = log_probs.gather(1, target.unsqueeze(1)).squeeze(1)
-        pt = log_pt.exp()
-        focal_term = (1 - pt).clamp(min=0).pow(self.gamma)
-        loss = -focal_term * log_pt
+        if self.label_smoothing > 0:
+            # Smoothed target q = (1-eps)*onehot + eps/C; focal term applied per class.
+            n_cls = logits.shape[1]
+            q = torch.full_like(log_probs, self.label_smoothing / n_cls)
+            q.scatter_(1, target.unsqueeze(1), 1.0 - self.label_smoothing + self.label_smoothing / n_cls)
+            focal = (1 - log_probs.exp()).clamp(min=0).pow(self.gamma)
+            loss = -(q * focal * log_probs).sum(dim=1)
+        else:
+            log_pt = log_probs.gather(1, target.unsqueeze(1)).squeeze(1)
+            pt = log_pt.exp()
+            focal_term = (1 - pt).clamp(min=0).pow(self.gamma)
+            loss = -focal_term * log_pt
 
         if self.alpha is not None:
             at = self.alpha.to(logits.device).gather(0, target)
