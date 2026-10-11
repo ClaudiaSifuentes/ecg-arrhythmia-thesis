@@ -1,0 +1,7 @@
+# ONE change vs E12: RR feature set "context" (src/data/rr_context.py).
+# Still 6 RR inputs (interface unchanged), but columns become
+# [RR, RR_next, RR_mean5, RR/RR_mean50 (patient rhythm), RR_next/RR, RR/RR_prev].
+# Deployment impact: one-beat latency (RR_next) + same transform in preprocessing.
+inherit: E12.yaml
+exp_id: E13_rrctx
+features: {rr_set: context}
