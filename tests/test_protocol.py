@@ -12,8 +12,12 @@ def _toy(n=600, seed=0):
     return Xb, Xr, y
 
 
-def test_training_is_bitwise_deterministic():
-    cfg = deep_update(DEFAULTS, {"optim": {"max_epochs": 2, "batch_size": 64}})
+import pytest
+
+
+@pytest.mark.parametrize("compile_", [False, True])
+def test_training_is_bitwise_deterministic(compile_):
+    cfg = deep_update(DEFAULTS, {"optim": {"max_epochs": 2, "batch_size": 64}, "compile": compile_})
     Xb, Xr, y = _toy()
     outs = []
     for _ in range(2):

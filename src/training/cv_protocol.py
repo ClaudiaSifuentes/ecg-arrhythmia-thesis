@@ -35,6 +35,7 @@ import torch.nn as nn
 from sklearn.model_selection import StratifiedGroupKFold
 
 from src.data.splits import TEST_PATIENTS
+from src.data.subjects import subject_ids
 from src.data.torch_datasets import load_processed_arrays
 from src.models.fusion import FusionClassifier
 from src.training.decision import decide_from_config
@@ -61,6 +62,7 @@ DEFAULTS: dict = {
     "decision": {"t_sveb": 0.24, "t_veb": None},
     "seeds": [0, 1, 2],
     "num_threads": 1,
+    "compile": False,
 }
 
 
@@ -99,7 +101,8 @@ class DevData:
     X_beats: np.ndarray
     X_rr: np.ndarray
     y: np.ndarray
-    pid: np.ndarray
+    pid: np.ndarray  # record id (kept in OOF for per-record analysis)
+    subject: np.ndarray  # grouping key for every split
 
 
 def load_dev_data(cfg: dict) -> DevData:
@@ -111,8 +114,10 @@ def load_dev_data(cfg: dict) -> DevData:
     pid_norm = _norm_pid(arr.patient_id)
     X_rr = build_rr_features(arr.X_rr, arr.patient_id, cfg["features"]["rr_set"])
     drop = set(TEST_PATIENTS) | {str(p) for p in cfg.get("exclude_patients") or []}
-    keep = ~np.isin(pid_norm, list(drop))
-    return DevData(arr.X_beats[keep], X_rr[keep], arr.y[keep], arr.patient_id[keep].astype(str))
+    is_mit = ~np.char.startswith(np.asarray(arr.patient_id).astype(str), "inc_")
+    keep = ~(np.isin(pid_norm, list(drop)) & is_mit)
+    pid = arr.patient_id[keep].astype(str)
+    return DevData(arr.X_beats[keep], X_rr[keep], arr.y[keep], pid, subject_ids(pid))
 
 
 def outer_folds(data: DevData, n_splits: int, split_seed: int) -> np.ndarray:
@@ -120,7 +125,7 @@ def outer_folds(data: DevData, n_splits: int, split_seed: int) -> np.ndarray:
 
     skf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=split_seed)
     fold = np.full(len(data.y), -1, dtype=int)
-    for k, (_, te) in enumerate(skf.split(np.zeros(len(data.y)), data.y, groups=data.pid)):
+    for k, (_, te) in enumerate(skf.split(np.zeros(len(data.y)), data.y, groups=data.subject)):
         fold[te] = k
     assert (fold >= 0).all()
     return fold
@@ -184,6 +189,9 @@ def train_model(cfg: dict, Xb_tr, Xr_tr, y_tr, Xb_va, Xr_va, y_va, *, seed: int,
     enable_determinism(seed, num_threads=cfg.get("num_threads"))
     o = cfg["optim"]
     model = FusionClassifier(dropout=float(cfg["model"]["dropout"]), use_rr=bool(cfg["model"]["use_rr"]))
+    # torch.compile only speeds up the training step (~1.5x on CPU); weights are
+    # shared with `model`, which is what gets evaluated and saved.
+    fwd = torch.compile(model) if cfg.get("compile") else model
     criterion = build_criterion(cfg["loss"])
     opt = torch.optim.Adam(model.parameters(), lr=float(o["lr"]), weight_decay=float(o["weight_decay"]))
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=float(o["lr_factor"]),
@@ -211,7 +219,7 @@ def train_model(cfg: dict, Xb_tr, Xr_tr, y_tr, Xb_va, Xr_va, y_va, *, seed: int,
             if augment is not None:
                 ecg = augment(ecg, yb)
             opt.zero_grad()
-            loss = criterion(model(ecg.unsqueeze(1), rr), yb)
+            loss = criterion(fwd(ecg.unsqueeze(1), rr), yb)
             loss.backward()
             opt.step()
             tot += loss.item() * len(yb)
@@ -255,13 +263,13 @@ def run_job(cfg: dict, seed: int, fold_k: int, out_dir: Path) -> Path:
     fold = outer_folds(data, int(cfg["cv"]["n_splits"]), int(cfg["cv"]["split_seed"]))
     te = np.nonzero(fold == fold_k)[0]
     tr_all = np.nonzero(fold != fold_k)[0]
-    assert set(data.pid[te]).isdisjoint(set(data.pid[tr_all]))
+    assert set(data.subject[te]).isdisjoint(set(data.subject[tr_all]))
 
     # Inner validation split depends only on split_seed and fold (not on seed).
-    itr, iva = inner_split(data.y[tr_all], data.pid[tr_all], int(cfg["cv"]["inner_val_frac_splits"]),
+    itr, iva = inner_split(data.y[tr_all], data.subject[tr_all], int(cfg["cv"]["inner_val_frac_splits"]),
                            int(cfg["cv"]["split_seed"]) + 1000 + fold_k)
     tr, va = tr_all[itr], tr_all[iva]
-    assert set(data.pid[tr]).isdisjoint(set(data.pid[va]))
+    assert set(data.subject[tr]).isdisjoint(set(data.subject[va]))
     log(f"fold {fold_k} seed {seed}: train {len(tr)} beats/{len(set(data.pid[tr]))} pts, "
         f"inner-val {len(va)}/{len(set(data.pid[va]))} pts {sorted(set(data.pid[va]))}, "
         f"test {len(te)}/{len(set(data.pid[te]))} pts {sorted(set(data.pid[te]))}")
@@ -313,7 +321,7 @@ def merge(cfg: dict, out_dir: Path, oof_path: Path) -> dict:
     prob = np.stack([softmax(l) for l in logits])
     oof_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        oof_path, y=data.y, prob=prob, logits=logits, fold=fold, patient_id=data.pid, seeds=np.array(seeds),
+        oof_path, y=data.y, prob=prob, logits=logits, fold=fold, patient_id=data.pid, subject=data.subject, seeds=np.array(seeds),
         val_idx=np.concatenate(va_idx), val_fold=np.concatenate(va_fold), val_seed=np.concatenate(va_seed),
         val_logits=np.concatenate(va_logits), val_y=data.y[np.concatenate(va_idx)],
         best_epochs=best_epochs, train_sec=train_sec, config=json.dumps(cfg),
@@ -335,8 +343,14 @@ def summarize_oof(oof_path: Path, decision_cfg: dict) -> dict:
     out = {"oof": str(oof_path), "seeds": d["seeds"].tolist(), "best_epochs": d["best_epochs"].tolist(),
            "rules": {}}
     rules = {"argmax": {"t_sveb": None, "t_veb": None}, "config": decision_cfg}
+    is_mit = ~np.char.startswith(d["patient_id"].astype(str), "inc_")
     for name, rule in rules.items():
         out["rules"][name] = {"decision": rule,
                               "per_seed": [metrics_for(d["y"], d["prob"][i], d["fold"], rule)
                                            for i in range(len(d["seeds"]))]}
+        if (~is_mit).any():
+            # MIT-BIH-only view: comparable with the MIT-BIH test set and the literature
+            out["rules"][f"{name}_mit"] = {"decision": rule, "per_seed": [
+                metrics_for(d["y"][is_mit], d["prob"][i][is_mit], d["fold"][is_mit], rule)
+                for i in range(len(d["seeds"]))]}
     return out
