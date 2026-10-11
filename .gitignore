@@ -8,13 +8,22 @@ __pycache__/
 
 # Data (MIT-BIH is not redistributed)
 data/raw/
-data/processed/
 data/mitbih/*.zip
+data/processed/_debug3/
+data/processed/mitbih_aami3/
+data/processed/mitbih_aami3_v2/
+data/processed/mitbih_incart/X_beats.npy
 
 # Outputs
-models/checkpoints/
 reports/
 logs/
+models/checkpoints/E01_best.pt
+models/checkpoints/E03_best.pt
+models/checkpoints/E05_best.pt
+models/checkpoints/E06_best.pt
+models/checkpoints/E07_best.pt
+models/checkpoints/E11_best.pt
+models/checkpoints/smoke_test.pt
 
 # VSCode (opcional)
 .vscode/
@@ -24,3 +33,4 @@ logs/
 
 # Contexto
 context.txt
+data/processed/mitbih_incart/X_beats.npy
