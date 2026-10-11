@@ -35,6 +35,10 @@ Prioridad: **P0** = invalida o sesga números reportados; **P1** = afecta reprod
 
 6. **Las exclusiones no se aplican de forma coherente.** `splits.EXCLUDED_RECORDS` incluye 232 y 209 (`splits.py:27`), pero 209 está en `TRAIN_PATIENTS` (`splits.py:64`) y 232 en `TEST_PATIENTS`; `make_patient_wise_splits` no consulta la lista. `build_dataset` sí filtra (`dataset_builder.py:248`), `build_dataset_multi_source` no. Según qué builder generó los `.npy`, 209/232 están o no están. **Pendiente de decisión del autor** (en esta rama: 209 en CV, 232 solo en test).
 
+6b. **Splits "por paciente" que en realidad son por registro.** INCART tiene 75 registros de solo 32 pacientes, con 2 o 3 registros por Holter; `StratifiedGroupKFold(groups=patient_ids)` agrupa por registro, así que un mismo paciente puede quedar en train y en evaluación. Los dos registros con más SVEB del pool (`I33`: 587, `I34`: 534) son consecutivos. En MIT-BIH, 201 y 202 son el mismo sujeto. **Corregido:** `src/data/subjects.py` agrupa por sujeto (201/202 ya mapeados; INCART desde `configs/incart_subjects.json`, que genera `scripts/incart_subjects.py` a partir de los encabezados de PhysioNet).
+
+6c. **`src/data/dataset_builder.py` no se podía importar.** El commit 2c3a8dc indentó todo el archivo 4 espacios (`IndentationError`). **Corregido:** restaurado, idéntico a la versión anterior, más un parámetro `channel` para elegir la derivación.
+
 ## P1 — reproducibilidad y comparabilidad
 
 7. **No determinismo.** `set_global_seeds` (`utils/reproducibility.py`) no fija `cudnn.deterministic`, `cudnn.benchmark=False` ni `torch.use_deterministic_algorithms`; en GPU, cuDNN elige kernels no deterministas → F1 0.708/0.724/0.718 con la misma semilla. `run_experiment.py:104,111` fija la semilla 42 sin opción. **Corregido:** `enable_determinism()` + generador explícito para el barajado + número de hilos fijo; `tests/test_protocol.py::test_training_is_bitwise_deterministic` verifica logits idénticos bit a bit entre dos ejecuciones.
@@ -54,6 +58,8 @@ Prioridad: **P0** = invalida o sesga números reportados; **P1** = afecta reprod
 13. **Contexto RR pobre para SVEB.** Las 6 features son causales y locales (ventana de 5 RR). Falta RR siguiente (pausa compensatoria) y RR normalizado por el ritmo propio del paciente (la feature más discriminante para SVEB en la literatura, p. ej. de Chazal 2004; Mondéjar-Guerra 2019). `src/data/rr_context.py` implementa un set `context` de 6 columnas (mantiene la forma de la interfaz; exige un latido de retraso en inferencia).
 
 14. **Desajuste de derivación MIT-BIH vs INCART.** `MITBIHDataset.load_data` toma `p_signal[:, 0]` (`mitbih_dataset.py:23`): en MIT-BIH es MLII (salvo el registro 114, donde el canal 0 es V5); en INCART el canal 0 es la derivación **I**, no II. La morfología de INCART que se agrega para SVEB no corresponde a la de MIT-BIH ni, probablemente, a la del dispositivo desplegado.
+
+14b. **F (fusión) se mapea a VEB** (`aami_mapping.py`, decisión de proyecto). AAMI EC57 la trata como clase propia; conviene declararlo en la tesis al compararse con la literatura.
 
 15. **Latidos centrados en la anotación, no en el pico detectado.** `dataset_builder.py:163` corta la ventana sobre `ann.sample`; en despliegue la ventana se centrará en el pico de Pan–Tompkins/neurokit. El modelo no ve jitter de centrado → justifica augmentation con desplazamiento temporal. (Además, el builder usa `method="neurokit"` (`dataset_builder.py:136`), no Pan–Tompkins como dice la descripción.)
 

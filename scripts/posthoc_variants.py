@@ -34,7 +34,7 @@ from src.training.experiment_report import KEYS, aggregate, compare  # noqa: E40
 from src.training.metrics import class_metrics  # noqa: E402
 
 GRID = np.round(np.arange(0.05, 0.96, 0.01), 2)
-T_GRID = np.round(np.exp(np.linspace(np.log(0.25), np.log(4.0), 81)), 4)
+T_GRID = np.round(np.exp(np.linspace(np.log(0.1), np.log(4.0), 101)), 4)
 
 
 def nll(logits, y, T):

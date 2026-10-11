@@ -17,10 +17,10 @@ class MITBIHDataset:
         self.labels = None
         self.r_peaks = None
 
-    def load_data(self):
+    def load_data(self, channel: int = 0):
         # NOTE: do not truncate the record to 250 samples; we need full-length signal
         record = wfdb.rdrecord(self.record_name)
-        self.ecg_data = record.p_signal[:, 0]  # single lead
+        self.ecg_data = record.p_signal[:, channel]  # single lead
 
         ann = wfdb.rdann(self.record_name, "atr")
         self.labels = ann.symbol

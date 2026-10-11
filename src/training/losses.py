@@ -35,7 +35,10 @@ class FocalLoss(nn.Module):
             focal = (1 - log_probs.exp()).clamp(min=0).pow(self.gamma)
             loss = -(q * focal * log_probs).sum(dim=1)
         else:
-            log_pt = log_probs.gather(1, target.unsqueeze(1)).squeeze(1)
+            # one-hot product instead of gather: gather's backward (scatter_add) is
+            # non-deterministic on CUDA; this is mathematically identical.
+            onehot = F.one_hot(target, num_classes=logits.shape[1]).to(log_probs.dtype)
+            log_pt = (log_probs * onehot).sum(dim=1)
             pt = log_pt.exp()
             focal_term = (1 - pt).clamp(min=0).pow(self.gamma)
             loss = -focal_term * log_pt

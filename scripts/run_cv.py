@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -32,12 +33,16 @@ def _job(args):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
-    ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--jobs", type=int, default=None,
+                    help="parallel processes (default: 1 on GPU, 4 on CPU)")
     ap.add_argument("--max_epochs", type=int, default=None, help="override (smoke tests only)")
     ap.add_argument("--seeds", type=int, nargs="*", default=None)
     args = ap.parse_args()
 
     cfg = load_config(args.config)
+    if args.jobs is None:
+        import torch
+        args.jobs = 1 if torch.cuda.is_available() else 4
     if args.max_epochs is not None:
         cfg["optim"]["max_epochs"] = args.max_epochs
     if args.seeds:
@@ -47,9 +52,16 @@ def main() -> None:
     (out_dir / "config.json").write_text(json.dumps(cfg, indent=2))
 
     jobs = [(cfg, int(s), k, str(out_dir)) for s in cfg["seeds"] for k in range(int(cfg["cv"]["n_splits"]))]
-    with ProcessPoolExecutor(max_workers=args.jobs) as ex:
-        for seed, fold in ex.map(_job, jobs):
+    if args.jobs <= 1:
+        # GPU (or debugging): run jobs sequentially in this process
+        for j in jobs:
+            seed, fold = _job(j)
             print(f"[{cfg['exp_id']}] done seed={seed} fold={fold}", flush=True)
+    else:
+        ctx = multiprocessing.get_context("spawn")  # CUDA-safe
+        with ProcessPoolExecutor(max_workers=args.jobs, mp_context=ctx) as ex:
+            for seed, fold in ex.map(_job, jobs):
+                print(f"[{cfg['exp_id']}] done seed={seed} fold={fold}", flush=True)
 
     summary = merge(cfg, out_dir, Path("reports") / "oof" / f"oof_{cfg['exp_id']}.npz")
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))

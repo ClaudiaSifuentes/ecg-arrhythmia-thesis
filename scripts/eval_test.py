@@ -87,8 +87,14 @@ def main():
         out_dir = Path("models") / "final" / cfg["exp_id"]
         out_dir.mkdir(parents=True, exist_ok=True)
         ckpts = [str(out_dir / f"seed{s}.pt") for s in cfg["seeds"]]
-        with ProcessPoolExecutor(max_workers=args.jobs) as ex:
-            list(ex.map(_train, [(cfg, int(s), c) for s, c in zip(cfg["seeds"], ckpts)]))
+        todo = [(cfg, int(s), c) for s, c in zip(cfg["seeds"], ckpts)]
+        if args.jobs <= 1 or torch.cuda.is_available():
+            for t in todo:
+                _train(t)
+        else:
+            import multiprocessing
+            with ProcessPoolExecutor(max_workers=args.jobs, mp_context=multiprocessing.get_context("spawn")) as ex:
+                list(ex.map(_train, todo))
         names = [f"{cfg['exp_id']}_seed{s}" for s in cfg["seeds"]]
 
     probs = []

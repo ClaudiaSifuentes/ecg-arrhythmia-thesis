@@ -12,7 +12,7 @@ data/mitbih/*.zip
 data/processed/_debug3/
 data/processed/mitbih_aami3/
 data/processed/mitbih_aami3_v2/
-data/processed/mitbih_incart/X_beats.npy
+data/processed/mitbih_incart/
 
 # Outputs
 reports/*
@@ -43,4 +43,8 @@ models/checkpoints/smoke_test.pt
 
 # Contexto
 context.txt
-data/processed/mitbih_incart/X_beats.npy
+data/processed/mitbih_incart/
+data/processed/svdb*/
+data/processed/inc_ch*/
+data/processed/mitbih_incart_*/
+models/final/

@@ -63,6 +63,7 @@ DEFAULTS: dict = {
     "seeds": [0, 1, 2],
     "num_threads": 1,
     "compile": False,
+    "device": "auto",
 }
 
 
@@ -163,14 +164,34 @@ def build_criterion(loss_cfg: dict) -> nn.Module:
     raise ValueError(loss_cfg["type"])
 
 
+class MeanPool1d(nn.Module):
+    """Global average pooling over time as an explicit mean.
+
+    Same output as nn.AdaptiveAvgPool1d(1) and no parameters (state_dict keys
+    are unchanged, so checkpoints load into the original FusionClassifier),
+    but its CUDA backward is deterministic, unlike adaptive_avg_pool's.
+    """
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.mean(dim=-1, keepdim=True)
+
+
+def get_device(cfg: dict) -> torch.device:
+    want = cfg.get("device", "auto")
+    if want == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(want)
+
+
 @torch.no_grad()
 def predict_logits(model: nn.Module, Xb: np.ndarray, Xr: np.ndarray, batch_size: int = 2048) -> np.ndarray:
     model.eval()
+    dev = next(model.parameters()).device
     out = []
     for i in range(0, len(Xb), batch_size):
-        ecg = torch.from_numpy(Xb[i:i + batch_size]).unsqueeze(1)
-        rr = torch.from_numpy(Xr[i:i + batch_size])
-        out.append(model(ecg, rr).numpy())
+        ecg = torch.from_numpy(np.ascontiguousarray(Xb[i:i + batch_size])).unsqueeze(1).to(dev)
+        rr = torch.from_numpy(np.ascontiguousarray(Xr[i:i + batch_size])).to(dev)
+        out.append(model(ecg, rr).cpu().numpy())
     return np.concatenate(out) if out else np.zeros((0, 3), dtype=np.float32)
 
 
@@ -188,11 +209,14 @@ def train_model(cfg: dict, Xb_tr, Xr_tr, y_tr, Xb_va, Xr_va, y_va, *, seed: int,
 
     enable_determinism(seed, num_threads=cfg.get("num_threads"))
     o = cfg["optim"]
+    device = get_device(cfg)
     model = FusionClassifier(dropout=float(cfg["model"]["dropout"]), use_rr=bool(cfg["model"]["use_rr"]))
-    # torch.compile only speeds up the training step (~1.5x on CPU); weights are
+    model.cnn.block3[3] = MeanPool1d()
+    model = model.to(device)
+    # torch.compile only speeds up the CPU training step (~1.5x); weights are
     # shared with `model`, which is what gets evaluated and saved.
-    fwd = torch.compile(model) if cfg.get("compile") else model
-    criterion = build_criterion(cfg["loss"])
+    fwd = torch.compile(model) if (cfg.get("compile") and device.type == "cpu") else model
+    criterion = build_criterion(cfg["loss"]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=float(o["lr"]), weight_decay=float(o["weight_decay"]))
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=float(o["lr_factor"]),
                                                        patience=int(o["lr_patience"]))
@@ -217,7 +241,8 @@ def train_model(cfg: dict, Xb_tr, Xr_tr, y_tr, Xb_va, Xr_va, y_va, *, seed: int,
             idx = perm[i:i + bs]
             ecg, rr, yb = Xb_t[idx], Xr_t[idx], y_t[idx]
             if augment is not None:
-                ecg = augment(ecg, yb)
+                ecg = augment(ecg, yb)  # on CPU, with its own seeded generator
+            ecg, rr, yb = ecg.to(device), rr.to(device), yb.to(device)
             opt.zero_grad()
             loss = criterion(fwd(ecg.unsqueeze(1), rr), yb)
             loss.backward()
@@ -240,7 +265,8 @@ def train_model(cfg: dict, Xb_tr, Xr_tr, y_tr, Xb_va, Xr_va, y_va, *, seed: int,
         if no_improve >= int(o["patience"]):
             break
     model.load_state_dict(best[2])
-    return model, {"best_epoch": best[1], "best_val_loss": best[0], "epochs_run": len(history), "history": history}
+    model = model.cpu()
+    return model, {"device": str(device), "best_epoch": best[1], "best_val_loss": best[0], "epochs_run": len(history), "history": history}
 
 
 # --------------------------------------------------------------------------
