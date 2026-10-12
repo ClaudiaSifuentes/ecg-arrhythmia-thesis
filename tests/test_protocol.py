@@ -32,6 +32,10 @@ def test_decision_rule_matches_e12_and_argmax():
     assert decide(p, t_sveb=0.24).tolist() == [1, 2, 0, 1]
     # VEB gate: needs p_VEB >= 0.5, otherwise best of {N, SVEB}
     assert decide(p, t_veb=0.5).tolist() == [0, 2, 0, 0]
+    # SVEB gate: a high t_sveb removes low-confidence SVEB calls
+    q = np.array([[0.2, 0.45, 0.35], [0.1, 0.8, 0.1], [0.40, 0.42, 0.18]])
+    assert decide(q).tolist() == [1, 1, 1]
+    assert decide(q, t_sveb=0.6).tolist() == [2, 1, 0]
 
 
 def test_inner_split_is_patient_disjoint():

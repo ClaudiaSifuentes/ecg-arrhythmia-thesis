@@ -10,3 +10,7 @@ inherit: E14_incII.yaml
 exp_id: E15_svdb
 data_dir: data/processed/mitbih_incartII_svdb
 cv: {fold_map: configs/cv_folds_E14.json}
+# SVEB threshold: median of the 15 thresholds picked on the inner validation
+# patients of each (seed, fold) (nested selection, never on OOF or test).
+# With SVDB the SVEB prevalence rises ~2.6x and alpha=8 over-predicts SVEB at argmax.
+decision: {t_sveb: 0.54, t_veb: null}

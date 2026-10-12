@@ -1,0 +1,8 @@
+# ONE change vs E15_svdb: focal-loss alpha for SVEB 8 -> 3.
+# With SVDB in the pool SVEB prevalence rose ~2.6x (1.4% -> 3.7%); alpha=8 was set
+# for the old prevalence and makes argmax over-predict SVEB (E15 needed t_sveb=0.54).
+# Threshold is re-selected the same nested way after the run.
+inherit: E15_svdb.yaml
+exp_id: E16_alpha3
+loss: {type: focal, gamma: 2.0, alpha: [1.0, 3.0, 3.0], label_smoothing: 0.0}
+decision: {t_sveb: null, t_veb: null}

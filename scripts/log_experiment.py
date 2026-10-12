@@ -6,7 +6,7 @@
 --rule   argmax | config (the experiment's config decision) | t_sveb=<x>
 --ens    0: one model per seed (default). 2: mean of probabilities of every
          pair of seeds (3 replicates -> a range). 3: mean of all seeds.
---subset all | mit (MIT-BIH records only)
+--subset all | mit (MIT-BIH records only) | nosvdb (subjects shared with E14) | svdb
 The decision (adoptar/descartar) follows src/training/experiment_report.compare.
 Appends a row to reports/experiments_log.csv and prints the comparison table.
 """
@@ -49,6 +49,10 @@ def build(exp: str, rule: str, ens: int, subset: str) -> dict:
     m = np.ones(len(d["y"]), dtype=bool)
     if subset == "mit":
         m = is_mitbih(d["patient_id"])
+    elif subset == "nosvdb":  # the 66 subjects shared with E12–E14 (identical beats)
+        m = ~np.char.startswith(d["patient_id"].astype(str), "svdb_")
+    elif subset == "svdb":
+        m = np.char.startswith(d["patient_id"].astype(str), "svdb_")
     return {"seeds": d["seeds"].tolist(), "best_epochs": d["best_epochs"].tolist(), "n_subjects": len(set(d["subject"][m])),
             "rules": {"r": {"decision": dec, "per_seed": [metrics_for(d["y"][m], p[m], d["fold"][m], dec) for p in reps]}}}
 

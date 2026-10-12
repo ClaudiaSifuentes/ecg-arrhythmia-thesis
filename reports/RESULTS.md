@@ -62,3 +62,19 @@ Solo se reporta; no se usó para elegir nada. ~96 % de los SVEB del test son del
 6. **Sin 232 nada detecta los 61 SVEB del test**: la generalización de SVEB a pacientes nuevos sigue siendo el problema abierto → E15 (SVDB, +12 169 SVEB, 66 registros con ≥10 SVEB).
 
 Candidato actual: **E14_incII, ensamble de 3 semillas, argmax** (`models/final/E14_incII/seed{0,1,2}.pt` en Drive). Interfaz sin cambios (latido 250 + 6 RR → 3 clases). En despliegue requiere calcular las 6 features RR de contexto (`src/data/rr_context.py`, 1 latido de retraso) y usar argmax (quitar el umbral 0.24). La derivación II solo afecta a los datos de entrenamiento de INCART.
+
+## E15 — + SVDB (78 registros, +12 169 SVEB). Folds pareados con E14 (mapa fijo)
+
+Comparación en los **mismos sujetos y latidos** que E14. Umbral SVEB elegido de forma anidada (en la validación interna de cada fold y semilla; mediana 0.54 → `configs/experiments/E15_svdb.yaml`), igual para ambos modelos.
+
+| vista | modelo | F1-macro | SVEB Se | SVEB PPV | SVEB F1 | VEB Se | VEB PPV | VEB F1 |
+|---|---|---|---|---|---|---|---|---|
+| MIT-BIH (37) | E14 umbral anidado | 0.650 [0.641–0.657] | 0.274 [0.258–0.284] | 0.269 [0.251–0.283] | 0.272 [0.255–0.284] | 0.828 [0.823–0.831] | 0.628 [0.614–0.635] | 0.714 [0.706–0.720] |
+| MIT-BIH (37) | **E15 umbral anidado** | **0.705** [0.700–0.708] | **0.473** [0.455–0.484] | **0.303** [0.294–0.308] | **0.369** [0.364–0.376] | **0.849** [0.819–0.878] | **0.709** [0.698–0.718] | **0.773** [0.753–0.787] |
+| 66 compartidos | E14 umbral anidado | 0.729 [0.702–0.754] | 0.388 [0.294–0.494] | 0.401 [0.355–0.456] | 0.393 [0.322–0.474] | 0.896 [0.893–0.897] | 0.757 [0.746–0.776] | 0.821 [0.815–0.832] |
+| 66 compartidos | E15 umbral anidado | 0.751 [0.734–0.769] | 0.572 [0.536–0.608] | 0.341 [0.284–0.383] | 0.427 [0.372–0.470] | 0.906 [0.883–0.925] | 0.801 [0.722–0.854] | 0.849 [0.806–0.888] |
+| 66 compartidos | E15 argmax | 0.735 [0.723–0.744] | 0.684 [0.675–0.700] | 0.265 [0.252–0.280] | 0.382 [0.368–0.400] | 0.893 [0.878–0.912] | 0.814 [0.730–0.869] | 0.851 [0.802–0.890] |
+
+Test fijo, ensamble 3 semillas, argmax (el umbral 0.54 se fijó después; su test está pendiente): completo F1-macro 0.822, SVEB Se 0.369 / PPV 0.937, VEB Se 0.984 / PPV 0.973. **Sin 232: SVEB Se 0.098 / PPV 0.158 (n=61)**, el primer modelo que detecta algo de esos SVEB (E14: 0.016 / 0.083).
+
+**Lectura E15.** En MIT-BIH (dominio del test y de la literatura) mejora la PPV y la Se de **ambas** clases. En el pool que incluye INCART cambia PPV de SVEB por Se (−0.06 / +0.18). Con argmax sobrepredice SVEB: α=8 se fijó para una prevalencia de SVEB ~2.6× menor → siguiente experimento E16 (α_SVEB 8 → 3). **Candidato actual: E15 + umbral SVEB 0.54, ensamble de 3 semillas.**
