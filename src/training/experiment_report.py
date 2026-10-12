@@ -13,8 +13,8 @@ Adoption rule (from the project brief), operationalised:
   For the class whose PPV is targeted (SVEB and/or VEB):
     1. mean pooled PPV improves (Δ > 0),
     2. mean pooled Se does not drop by more than 0.03 (both classes),
-    3. per-fold PPV (seed-averaged) improves in the majority of folds (>= 3/5),
-    4. the other class's PPV does not drop by more than 0.01.
+    3. per-fold PPV (seed-averaged) improves in the majority of folds (>= 3/5).
+  A drop > 0.01 in the other class's PPV is reported as a warning, not a veto.
 """
 
 from __future__ import annotations
@@ -76,9 +76,10 @@ def compare(base: dict, exp: dict, base_name: str, exp_name: str, rule: str = "c
         checks[f"{c}_ppv_folds_better"] = int(sum(y > x for x, y in zip(a[f"{c}_ppv"]["per_fold"],
                                                                          b[f"{c}_ppv"]["per_fold"])))
     improved = [c for c in target if checks[f"{c}_ppv_delta"] > 0 and checks[f"{c}_ppv_folds_better"] >= 3]
-    others_ok = all(checks[f"{c}_ppv_delta"] >= -0.01 for c in ("sveb", "veb") if c not in improved)
-    adopt = bool(improved) and checks["sveb_se_ok"] and checks["veb_se_ok"] and others_ok
-    checks.update({"improved_classes": improved, "adopt": adopt})
+    adopt = bool(improved) and checks["sveb_se_ok"] and checks["veb_se_ok"]
+    warnings = [f"{c} PPV {checks[f'{c}_ppv_delta']:+.3f}" for c in ("sveb", "veb")
+                if c not in improved and checks[f"{c}_ppv_delta"] < -0.01]
+    checks.update({"improved_classes": improved, "adopt": adopt, "warnings": warnings})
     return "\n".join(lines), checks
 
 

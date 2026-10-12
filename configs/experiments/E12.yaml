@@ -10,7 +10,11 @@ cv: {n_splits: 5, split_seed: 42, inner_val_frac_splits: 5}
 features: {rr_set: base}
 augment: null
 # Decision rule shared by CV, test and inference (src/training/decision.py).
-decision: {t_sveb: 0.24, t_veb: null}
+# t_sveb=null (argmax). The legacy 0.24 was tuned on the 6 fixed val patients;
+# on subject-wise OOF it is clearly worse (SVEB PPV 0.070 vs 0.232, F1-macro
+# 0.568 vs 0.637) and the OOF-optimal SVEB threshold is ~0.50 = argmax
+# (reports/thresholds/E12.md, nested selection gives no gain over argmax).
+decision: {t_sveb: null, t_veb: null}
 seeds: [0, 1, 2]
 num_threads: 1
 compile: true
