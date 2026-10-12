@@ -23,6 +23,7 @@ reports/*
 !reports/thresholds/
 !reports/test/
 !reports/cv/
+!reports/robustness/
 reports/cv/*/part_*.npz
 reports/cv/*/log_*.txt
 models/cv/

@@ -1,0 +1,11 @@
+# ONE change vs E16_alpha3 (current best): train-time beat augmentation
+# (src/data/augment.py), applied to 50% of training beats, all classes:
+#   time shift U{-8..8} samples (R-peak centring error of the deployed detector),
+#   amplitude scale ±10%, baseline drift (0.1–0.5 Hz sine, amp 0.15),
+#   Gaussian noise (std 0.04 ≈ 28 dB SNR on the record-z-scored signal).
+# Deliberately NOT the same generator as the robustness evaluation
+# (scripts/eval_robustness.py: 130 Hz round trip, motion bursts, tiered contact noise).
+# Validation, OOF and test beats are never augmented.
+inherit: E16_alpha3.yaml
+exp_id: E17_aug
+augment: {p: 0.5, gauss_std: 0.04, baseline_amp: 0.15, shift_max: 8, scale: 0.1}

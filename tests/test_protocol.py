@@ -15,9 +15,12 @@ def _toy(n=600, seed=0):
 import pytest
 
 
-@pytest.mark.parametrize("compile_", [False, True])
-def test_training_is_bitwise_deterministic(compile_):
-    cfg = deep_update(DEFAULTS, {"optim": {"max_epochs": 2, "batch_size": 64}, "compile": compile_})
+@pytest.mark.parametrize("compile_,augment", [(False, None), (True, None),
+                                               (False, {"p": 0.5, "gauss_std": 0.04, "baseline_amp": 0.15,
+                                                        "shift_max": 8, "scale": 0.1})])
+def test_training_is_bitwise_deterministic(compile_, augment):
+    cfg = deep_update(DEFAULTS, {"optim": {"max_epochs": 2, "batch_size": 64}, "compile": compile_,
+                                 "augment": augment})
     Xb, Xr, y = _toy()
     outs = []
     for _ in range(2):

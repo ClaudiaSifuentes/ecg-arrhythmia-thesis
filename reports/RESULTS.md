@@ -78,3 +78,19 @@ Comparación en los **mismos sujetos y latidos** que E14. Umbral SVEB elegido de
 Test fijo, ensamble 3 semillas, argmax (el umbral 0.54 se fijó después; su test está pendiente): completo F1-macro 0.822, SVEB Se 0.369 / PPV 0.937, VEB Se 0.984 / PPV 0.973. **Sin 232: SVEB Se 0.098 / PPV 0.158 (n=61)**, el primer modelo que detecta algo de esos SVEB (E14: 0.016 / 0.083).
 
 **Lectura E15.** En MIT-BIH (dominio del test y de la literatura) mejora la PPV y la Se de **ambas** clases. En el pool que incluye INCART cambia PPV de SVEB por Se (−0.06 / +0.18). Con argmax sobrepredice SVEB: α=8 se fijó para una prevalencia de SVEB ~2.6× menor → siguiente experimento E16 (α_SVEB 8 → 3). **Candidato actual: E15 + umbral SVEB 0.54, ensamble de 3 semillas.**
+
+## E16 — focal α_SVEB 8 → 3 (folds pareados con E15)
+
+Con SVDB la prevalencia de SVEB subió ~2.6×; α=8 sobrepredecía SVEB. Con α=3 el modelo queda calibrado: el umbral anidado sale ≈0.46 (≈ argmax), así que **se despliega con argmax, sin umbral**.
+
+| vista | modelo | F1-macro | SVEB Se | SVEB PPV | SVEB F1 | VEB Se | VEB PPV | VEB F1 | AP SVEB |
+|---|---|---|---|---|---|---|---|---|---|
+| MIT-BIH (37) | E15 + umbral anidado (candidato anterior) | 0.705 [0.700–0.708] | 0.473 [0.455–0.484] | 0.303 [0.294–0.308] | 0.369 [0.364–0.376] | 0.849 [0.819–0.878] | 0.709 [0.698–0.718] | 0.773 [0.753–0.787] | 0.306 |
+| MIT-BIH (37) | **E16 argmax** | **0.716** [0.710–0.724] | 0.452 [0.433–0.481] | **0.314** [0.291–0.336] | 0.370 [0.349–0.382] | 0.841 [0.822–0.851] | **0.767** [0.729–0.840] | **0.802** [0.775–0.845] | **0.350** |
+| 66 compartidos | E15 + umbral anidado | 0.751 [0.734–0.769] | 0.572 [0.536–0.608] | 0.341 [0.284–0.383] | 0.427 [0.372–0.470] | 0.906 [0.883–0.925] | 0.801 [0.722–0.854] | 0.849 [0.806–0.888] | 0.342 |
+| 66 compartidos | **E16 argmax** | **0.777** [0.772–0.784] | 0.593 [0.581–0.615] | **0.425** [0.363–0.473] | **0.494** [0.448–0.522] | 0.910 [0.908–0.913] | 0.816 [0.761–0.883] | 0.859 [0.830–0.896] | **0.473** |
+| pool completo (144) | E16 ensamble 3, argmax | 0.774 | 0.518 | 0.536 | 0.527 | 0.892 | 0.765 | 0.823 | 0.502 |
+
+Test fijo, ensamble E16 argmax: completo F1-macro 0.774, SVEB Se 0.249 / PPV 0.978, VEB Se 0.983 / PPV 0.963; sin 232 (SVEB n=61): Se 0.033 / PPV 0.222. (E15 con t=0.54 en test: F1-macro 0.784, SVEB Se 0.278 / PPV 0.964; sin 232 Se 0.016 / PPV 0.071.) El test sigue sin discriminar entre modelos.
+
+**Candidato actual: E16 (MIT-BIH + INCART deriv. II + SVDB, RR de contexto, focal γ=2 α=[1,3,3]), ensamble de 3 semillas, argmax.** Siguiente: robustez (E17, augmentation) medida con `scripts/eval_robustness.py`.
