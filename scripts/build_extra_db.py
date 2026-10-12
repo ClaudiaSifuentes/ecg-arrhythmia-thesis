@@ -8,8 +8,11 @@ Needs internet access to PhysioNet (run it in Colab or locally).
     python scripts/build_extra_db.py --db incartdb --name inc --channel 1 --fs 257
 
     # concatenate onto an existing processed dataset
-    python scripts/build_extra_db.py --merge data/processed/mitbih_incart data/processed/svdb \
+    python scripts/build_extra_db.py --merge data/processed/mitbih_incart data/processed/svdb_ch0 \
         --out data/processed/mitbih_incart_svdb
+    # MIT-BIH rows of the current dataset + INCART rebuilt with lead II
+    python scripts/build_extra_db.py --merge data/processed/mitbih_incart data/processed/inc_ch1 \
+        --keep_prefix mit_ inc_ --out data/processed/mitbih_incartII
 
 Same steps as the original builder (bandpass 0.5–40 Hz, resample to 360 Hz,
 R-peak detection, 250-sample windows [R-100, R+150), 6 RR features, record
@@ -51,10 +54,18 @@ def build(db: str, name: str, fs: int, channel: int, out: Path) -> None:
     print("records with >=10 SVEB:", int((c >= 10).sum()), "| top:", sorted(zip(c, u), reverse=True)[:8])
 
 
-def merge(srcs: list[str], out: Path) -> None:
+def merge(srcs: list[str], out: Path, keep_prefix: list[str] | None = None) -> None:
+    """Concatenate processed datasets. `keep_prefix[i]` (e.g. "mit_") keeps only
+    the rows of source i whose patient_id starts with it ("" keeps all)."""
+
     out.mkdir(parents=True, exist_ok=True)
+    masks = []
+    for i, s in enumerate(srcs):
+        pid = np.load(Path(s) / "patient_id.npy").astype(str)
+        pre = (keep_prefix or [""] * len(srcs))[i]
+        masks.append(np.char.startswith(pid, pre) if pre else np.ones(len(pid), dtype=bool))
     for f in FILES:
-        parts = [np.load(Path(s) / f) for s in srcs]
+        parts = [np.load(Path(s) / f)[m] for s, m in zip(srcs, masks)]
         if f == "patient_id.npy":
             parts = [p.astype("<U16") for p in parts]
         np.save(out / f, np.concatenate(parts, axis=0))
@@ -69,10 +80,11 @@ def main():
     ap.add_argument("--fs", type=int, default=128)
     ap.add_argument("--channel", type=int, default=0)
     ap.add_argument("--merge", nargs="+")
+    ap.add_argument("--keep_prefix", nargs="+", default=None, help="per --merge source, e.g. mit_ ''")
     ap.add_argument("--out")
     args = ap.parse_args()
     if args.merge:
-        merge(args.merge, Path(args.out))
+        merge(args.merge, Path(args.out), args.keep_prefix)
     else:
         build(args.db, args.name, args.fs, args.channel, Path(args.out or f"data/processed/{args.name}_ch{args.channel}"))
 

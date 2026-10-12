@@ -1,0 +1,9 @@
+# ONE change vs E13_rrctx (current best): INCART rebuilt with lead II
+# (channel 1) instead of lead I (channel 0), so INCART morphology matches
+# MIT-BIH MLII. MIT-BIH rows unchanged. Build in Colab (needs PhysioNet):
+#   python scripts/build_extra_db.py --db incartdb --name inc --channel 1 --fs 257
+#   python scripts/build_extra_db.py --merge data/processed/mitbih_incart data/processed/inc_ch1 \
+#       --keep_prefix mit_ inc_ --out data/processed/mitbih_incartII
+inherit: E13_rrctx.yaml
+exp_id: E14_incII
+data_dir: data/processed/mitbih_incartII
