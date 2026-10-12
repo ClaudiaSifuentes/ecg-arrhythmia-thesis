@@ -3,17 +3,16 @@
     python scripts/incart_subjects.py            # needs internet (PhysioNet)
     python scripts/incart_subjects.py --local data/raw/incartdb
 
-INCART: 75 records extracted from 32 Holter recordings. Records cut from the
-same Holter recording share the header comments (age, sex, diagnoses) and are
-consecutive, so consecutive records with identical comments are grouped as
-one subject. The map is written to configs/incart_subjects.json and picked up
-by src/data/subjects.py. Review the printed groups before trusting them.
+INCART: 75 records extracted from 32 Holter recordings. Each header comment
+names its source recording as "| patient N |"; records are grouped by N. The map is written to configs/incart_subjects.json and picked up
+by src/data/subjects.py. Expect 32 subjects.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import wfdb
@@ -32,17 +31,16 @@ def main():
         comments[r] = " | ".join(c.strip() for c in (h.comments or []))
         print(r, comments[r])
 
-    mapping, groups = {}, []
-    prev_r, prev_c = None, None
+    # Every INCART header names its source Holter as "| patient N |".
+    mapping, groups = {}, {}
     for r in sorted(comments):
-        if prev_r is not None and comments[r] == prev_c and comments[r]:
-            subject = mapping[f"inc_{prev_r}"]
-        else:
-            subject = f"inc_S{len(groups) + 1:02d}"
-            groups.append([])
+        m = re.search(r"\|\s*patient\s+(\d+)\s*\|", comments[r])
+        if not m:
+            raise SystemExit(f"{r}: no 'patient N' field in header comments: {comments[r]!r}")
+        subject = f"inc_P{int(m.group(1)):02d}"
         mapping[f"inc_{r}"] = subject
-        groups[-1].append(r)
-        prev_r, prev_c = r, comments[r]
+        groups.setdefault(subject, []).append(r)
+    groups = list(groups.values())
 
     print(f"\n{len(groups)} subjects inferred from 75 records (PhysioNet states 32 Holter recordings):")
     for g in groups:
