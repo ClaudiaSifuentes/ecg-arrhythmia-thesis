@@ -115,19 +115,41 @@ def load_dev_data(cfg: dict) -> DevData:
     pid_norm = _norm_pid(arr.patient_id)
     X_rr = build_rr_features(arr.X_rr, arr.patient_id, cfg["features"]["rr_set"])
     drop = set(TEST_PATIENTS) | {str(p) for p in cfg.get("exclude_patients") or []}
-    is_mit = ~np.char.startswith(np.asarray(arr.patient_id).astype(str), "inc_")
-    keep = ~(np.isin(pid_norm, list(drop)) & is_mit)
+    keep = ~(np.isin(pid_norm, list(drop)) & is_mitbih(arr.patient_id))
     pid = arr.patient_id[keep].astype(str)
     return DevData(arr.X_beats[keep], X_rr[keep], arr.y[keep], pid, subject_ids(pid))
 
 
-def outer_folds(data: DevData, n_splits: int, split_seed: int) -> np.ndarray:
-    """Fold index per beat. Depends only on (patients, labels, split_seed)."""
+def is_mitbih(patient_id: np.ndarray) -> np.ndarray:
+    """MIT-BIH rows: `mit_` prefix, or every row of an unprefixed (MIT-only) dataset."""
 
-    skf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=split_seed)
+    pid = np.asarray(patient_id).astype(str)
+    if not (np.char.find(pid, "_") >= 0).any():
+        return np.ones(len(pid), dtype=bool)
+    return np.char.startswith(pid, "mit_")
+
+
+def outer_folds(data: DevData, n_splits: int, split_seed: int, fold_map: str | None = None) -> np.ndarray:
+    """Fold index per beat.
+
+    Without `fold_map`: StratifiedGroupKFold over subjects (depends on the
+    labels, so changing the data — e.g. rebuilding INCART — reshuffles subjects).
+    With `fold_map` (JSON {subject: fold}): mapped subjects keep their fold, so
+    experiments on different data versions stay comparable fold by fold;
+    unmapped subjects (a new database) are split on their own with
+    StratifiedGroupKFold and appended fold k -> fold k.
+    """
+
     fold = np.full(len(data.y), -1, dtype=int)
-    for k, (_, te) in enumerate(skf.split(np.zeros(len(data.y)), data.y, groups=data.subject)):
-        fold[te] = k
+    if fold_map:
+        fmap = json.loads(Path(fold_map).read_text())
+        for subj, k in fmap.items():
+            fold[data.subject == subj] = int(k)
+    rest = np.nonzero(fold < 0)[0]
+    if len(rest):
+        skf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=split_seed)
+        for k, (_, te) in enumerate(skf.split(np.zeros(len(rest)), data.y[rest], groups=data.subject[rest])):
+            fold[rest[te]] = k
     assert (fold >= 0).all()
     return fold
 
@@ -286,7 +308,7 @@ def run_job(cfg: dict, seed: int, fold_k: int, out_dir: Path) -> Path:
         logf.flush()
 
     data = load_dev_data(cfg)
-    fold = outer_folds(data, int(cfg["cv"]["n_splits"]), int(cfg["cv"]["split_seed"]))
+    fold = outer_folds(data, int(cfg["cv"]["n_splits"]), int(cfg["cv"]["split_seed"]), cfg["cv"].get("fold_map"))
     te = np.nonzero(fold == fold_k)[0]
     tr_all = np.nonzero(fold != fold_k)[0]
     assert set(data.subject[te]).isdisjoint(set(data.subject[tr_all]))
@@ -327,7 +349,7 @@ def run_job(cfg: dict, seed: int, fold_k: int, out_dir: Path) -> Path:
 
 def merge(cfg: dict, out_dir: Path, oof_path: Path) -> dict:
     data = load_dev_data(cfg)
-    fold = outer_folds(data, int(cfg["cv"]["n_splits"]), int(cfg["cv"]["split_seed"]))
+    fold = outer_folds(data, int(cfg["cv"]["n_splits"]), int(cfg["cv"]["split_seed"]), cfg["cv"].get("fold_map"))
     seeds = [int(s) for s in cfg["seeds"]]
     K = int(cfg["cv"]["n_splits"])
     N = len(data.y)
@@ -369,7 +391,7 @@ def summarize_oof(oof_path: Path, decision_cfg: dict) -> dict:
     out = {"oof": str(oof_path), "seeds": d["seeds"].tolist(), "best_epochs": d["best_epochs"].tolist(),
            "rules": {}}
     rules = {"argmax": {"t_sveb": None, "t_veb": None}, "config": decision_cfg}
-    is_mit = ~np.char.startswith(d["patient_id"].astype(str), "inc_")
+    is_mit = is_mitbih(d["patient_id"])
     for name, rule in rules.items():
         out["rules"][name] = {"decision": rule,
                               "per_seed": [metrics_for(d["y"], d["prob"][i], d["fold"], rule)

@@ -1,0 +1,12 @@
+# ONE change vs E14_incII (current best): add the MIT-BIH Supraventricular
+# Arrhythmia DB (SVDB, 78 records, 128 Hz -> 360 Hz) to the CV / training pool.
+# Folds of the 66 existing subjects are frozen (configs/cv_folds_E14.json) so the
+# comparison with E14 is fold by fold; SVDB subjects are split on their own.
+# Each SVDB record is treated as its own subject (no subject map published).
+# Build in Colab:
+#   python scripts/build_extra_db.py --merge data/processed/mitbih_incartII data/processed/svdb_ch0 \
+#       --out data/processed/mitbih_incartII_svdb
+inherit: E14_incII.yaml
+exp_id: E15_svdb
+data_dir: data/processed/mitbih_incartII_svdb
+cv: {fold_map: configs/cv_folds_E14.json}

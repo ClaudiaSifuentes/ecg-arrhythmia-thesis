@@ -28,7 +28,7 @@ from src.data.rr_context import build_rr_features  # noqa: E402
 from src.data.splits import TEST_PATIENTS, TRAIN_PATIENTS, VAL_PATIENTS  # noqa: E402
 from src.data.torch_datasets import load_processed_arrays  # noqa: E402
 from src.models.fusion import FusionClassifier  # noqa: E402
-from src.training.cv_protocol import _norm_pid, load_config, predict_logits, softmax, train_model  # noqa: E402
+from src.training.cv_protocol import _norm_pid, is_mitbih, load_config, predict_logits, softmax, train_model  # noqa: E402
 from src.training.decision import decide_from_config  # noqa: E402
 from src.training.metrics import class_metrics  # noqa: E402
 
@@ -38,8 +38,8 @@ def _arrays(cfg):
     pid = _norm_pid(arr.patient_id)
     Xr = build_rr_features(arr.X_rr, arr.patient_id, cfg["features"]["rr_set"])
     sel = {n: np.isin(pid, lst) for n, lst in (("train", TRAIN_PATIENTS), ("val", VAL_PATIENTS), ("test", TEST_PATIENTS))}
-    if arr.patient_id[0].startswith(("mit_", "inc_")):
-        sel["train"] |= np.char.startswith(arr.patient_id.astype(str), "inc_")
+    # every non-MIT-BIH source (INCART, SVDB, ...) is training-only
+    sel["train"] |= ~is_mitbih(arr.patient_id)
     return arr, Xr, pid, sel
 
 

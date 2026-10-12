@@ -23,7 +23,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.training.cv_protocol import metrics_for  # noqa: E402
+from src.training.cv_protocol import is_mitbih, metrics_for  # noqa: E402
 from src.training.experiment_report import append_log, compare, format_summary  # noqa: E402
 
 
@@ -48,7 +48,7 @@ def build(exp: str, rule: str, ens: int, subset: str) -> dict:
         reps = [P[list(c)].mean(axis=0) for c in itertools.combinations(range(S), ens)]
     m = np.ones(len(d["y"]), dtype=bool)
     if subset == "mit":
-        m = ~np.char.startswith(d["patient_id"].astype(str), "inc_")
+        m = is_mitbih(d["patient_id"])
     return {"seeds": d["seeds"].tolist(), "best_epochs": d["best_epochs"].tolist(), "n_subjects": len(set(d["subject"][m])),
             "rules": {"r": {"decision": dec, "per_seed": [metrics_for(d["y"][m], p[m], d["fold"][m], dec) for p in reps]}}}
 
