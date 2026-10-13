@@ -117,3 +117,20 @@ El error de centrado (±22 ms) no afecta a ninguno (Δ ≤ 0.01). Test fijo, ens
 ### Decisión con el destino real del modelo (wearable de pecho)
 
 El modelo se desplegará en un **wearable de pecho**, así que desde E17 la regla de adopción se aplica principalmente a los pacientes MIT-BIH OOF **con la señal degradada**. La guarda con señal limpia es: el F1-macro no baja más de 0.02 y la Se no baja más de 0.03. Con este criterio **E17 pasa a ser el candidato provisional**: con la simulación Polar H10, la PPV de SVEB sube +0.043 y la Se +0.059; la Se de VEB sube +0.173, aunque su PPV baja −0.090. Con la señal limpia el F1-macro baja −0.016, dentro de la guarda. Queda pendiente confirmarlo con **ruido real** de la MIT-BIH Noise Stress Test DB (`src/data/nstdb_noise.py`: em / ma / bw a 12 dB y mezcla a 6 dB), porque la simulación es sintética y no está validada contra un Polar real.
+
+## Robustez con ruido REAL (NSTDB) — E16 vs E17 vs E18
+
+Ensamble de 3 semillas (lo que se despliega), pacientes MIT-BIH OOF, argmax. em = artefacto de electrodo, ma = muscular, bw = deriva de línea base (NSTDB, ruido real grabado en voluntarios); "all6" = mezcla al azar a 6 dB.
+
+| señal | E16 F1m | E16 SVEB PPV / Se | E16 VEB PPV / Se | E17 F1m | E17 SVEB PPV / Se | E17 VEB PPV / Se | E18 F1m | E18 SVEB PPV / Se | E18 VEB PPV / Se |
+|---|---|---|---|---|---|---|---|---|---|
+| limpia | **0.725** | **0.331** / 0.453 | 0.779 / 0.855 | 0.706 | 0.281 / 0.436 | 0.762 / 0.844 | 0.712 | 0.321 / 0.444 | 0.733 / 0.859 |
+| Polar sim (sintética) | 0.671 | 0.282 / 0.354 | 0.907 / 0.603 | 0.693 | 0.251 / 0.434 | 0.796 / 0.776 | **0.694** | 0.265 / 0.429 | 0.776 / 0.789 |
+| NSTDB em 12 dB | **0.701** | **0.305** / 0.447 | 0.695 / 0.861 | 0.681 | 0.250 / 0.418 | 0.690 / 0.849 | 0.685 | 0.282 / 0.436 | 0.657 / 0.864 |
+| NSTDB ma 12 dB | **0.652** | 0.281 / 0.298 | 0.792 / 0.621 | 0.623 | 0.244 / 0.287 | 0.745 / 0.559 | 0.638 | 0.282 / 0.300 | 0.714 / 0.610 |
+| NSTDB bw 12 dB | **0.700** | **0.276** / 0.436 | 0.772 / 0.806 | 0.683 | 0.247 / 0.417 | 0.747 / 0.788 | 0.682 | 0.255 / 0.411 | 0.717 / 0.812 |
+| NSTDB mezcla 6 dB | **0.601** | **0.279** / 0.298 | 0.574 / 0.544 | 0.585 | 0.229 / 0.278 | 0.565 / 0.535 | 0.593 | 0.249 / 0.285 | 0.557 / 0.557 |
+
+**Lectura.** La augmentation sintética (E17, E18) solo ayuda con el simulador sintético, cuyo ruido se parece al de la propia augmentation. **Con ruido real no ayuda: E16 queda igual o mejor en todas las condiciones.** Se revierte la adopción provisional de E17 y **E16 sigue siendo el candidato**. Para la tesis: evaluar la robustez solo con ruido simulado puede llevar a conclusiones equivocadas.
+
+**Cambio de protocolo:** desde aquí cada registro de NSTDB se divide en el tiempo. La 1.ª mitad queda para entrenamiento (E19) y la 2.ª mitad solo para evaluación. Las robusteces de E16, E17 y E18 se recalculan con la 2.ª mitad (sección 18 del notebook) para que la comparación con E19 sea limpia.

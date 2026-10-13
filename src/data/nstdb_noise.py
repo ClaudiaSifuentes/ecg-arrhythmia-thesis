@@ -6,8 +6,9 @@ electrodes placed so the ECG is not visible:
   em  electrode motion artifact (the hardest for beat detectors)
   ma  muscle (EMG) artifact
 These are real wearable-type artifacts, unlike the synthetic generators in
-src/data/domain_shift_sim.py, so they are used as a second, independent
-robustness check (never for training).
+src/data/domain_shift_sim.py. Each record is split in time: the first half
+may be used for training-time augmentation (E19), the second half only for
+robustness evaluation, so evaluation noise is never seen in training.
 
 Noise is preprocessed like the ECG (bandpass 0.5–40 Hz) and added to each
 250-sample beat window with a random offset. SNR is defined per beat:
@@ -26,8 +27,13 @@ import numpy as np
 NOISE_TYPES = ("bw", "em", "ma")
 
 
-def load_nstdb_noise(raw_dir: str | Path = "data/raw/nstdb") -> dict[str, np.ndarray]:
-    """Download (once) and return {type: bandpassed channel-0 signal at 360 Hz}."""
+def load_nstdb_noise(raw_dir: str | Path = "data/raw/nstdb", part: str = "eval") -> dict[str, np.ndarray]:
+    """Download (once) and return {type: bandpassed channel-0 signal at 360 Hz}.
+
+    part: "train" = first half of each 30-min noise record (training-time
+    augmentation only), "eval" = second half (robustness evaluation only),
+    "all" = whole record. Train and eval never share noise samples.
+    """
 
     import wfdb
 
@@ -41,7 +47,11 @@ def load_nstdb_noise(raw_dir: str | Path = "data/raw/nstdb") -> dict[str, np.nda
     for r in NOISE_TYPES:
         rec = wfdb.rdrecord(str(raw_dir / r))
         assert rec.fs == 360, rec.fs
-        out[r] = apply_bandpass(rec.p_signal[:, 0], fs=360).astype(np.float32)
+        raw = rec.p_signal[:, 0]
+        half = len(raw) // 2
+        # split BEFORE filtering so the zero-phase filter cannot mix the halves
+        seg = {"train": raw[:half], "eval": raw[half:], "all": raw}[part]
+        out[r] = apply_bandpass(seg, fs=360).astype(np.float32)
     return out
 
 

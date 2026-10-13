@@ -62,7 +62,7 @@ def perturb(name: str, X: np.ndarray, seed: int) -> np.ndarray:
         from src.data.nstdb_noise import add_nstdb_noise, load_nstdb_noise
 
         if _NSTDB is None:
-            _NSTDB = load_nstdb_noise()
+            _NSTDB = load_nstdb_noise(part="eval")  # second half only: never used for training
         types, snr = NSTDB_PERTURB[name]
         return add_nstdb_noise(X, _NSTDB, types, snr, seed)
     if name == "polar_sim":

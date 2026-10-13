@@ -1,0 +1,10 @@
+# ONE change vs E16_alpha3 (current candidate): train-time augmentation with
+# REAL electrode/muscle/baseline noise from the MIT-BIH Noise Stress Test DB,
+# added to 50% of training beats at a random per-beat SNR in [6, 24] dB.
+# Only the FIRST half of each NSTDB record is used here; robustness is
+# evaluated with the SECOND half (src/data/nstdb_noise.py), so the evaluation
+# noise is never seen in training. (E17/E18 synthetic augmentation helped only
+# on the synthetic Polar simulation, not on real noise.)
+inherit: E16_alpha3.yaml
+exp_id: E19_nstdb_aug
+augment: {p: 0.5, nstdb_snr: [6, 24]}
