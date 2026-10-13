@@ -113,3 +113,7 @@ Robustez medida con `scripts/eval_robustness.py`: cada modelo de CV re-evalúa *
 El error de centrado (±22 ms) no afecta a ninguno (Δ ≤ 0.01). Test fijo, ensamble: E17 F1-macro 0.789, SVEB Se 0.282 / PPV 0.978 (E16: 0.774, 0.249 / 0.978).
 
 **Lectura E17.** Con señal limpia de MIT-BIH empeora la PPV de SVEB (−0.040, 1/5 folds) → **no se adopta como reemplazo según la regla**. Bajo la degradación simulada tipo Polar H10 es claramente más robusto (F1-macro MIT +0.053; VEB Se +0.17). Si el despliegue es un wearable de pecho, E17 es preferible; la decisión depende del dispositivo. Siguiente propuesta: E18 (augmentation más suave, p=0.25 sin desplazamiento) para buscar ambas cosas.
+
+### Decisión con el destino real del modelo (wearable de pecho)
+
+El modelo se desplegará en un **wearable de pecho**, así que desde E17 la regla de adopción se aplica principalmente a los pacientes MIT-BIH OOF **con la señal degradada**. La guarda con señal limpia es: el F1-macro no baja más de 0.02 y la Se no baja más de 0.03. Con este criterio **E17 pasa a ser el candidato provisional**: con la simulación Polar H10, la PPV de SVEB sube +0.043 y la Se +0.059; la Se de VEB sube +0.173, aunque su PPV baja −0.090. Con la señal limpia el F1-macro baja −0.016, dentro de la guarda. Queda pendiente confirmarlo con **ruido real** de la MIT-BIH Noise Stress Test DB (`src/data/nstdb_noise.py`: em / ma / bw a 12 dB y mezcla a 6 dB), porque la simulación es sintética y no está validada contra un Polar real.

@@ -15,6 +15,12 @@ Adoption rule (from the project brief), operationalised:
     2. mean pooled Se does not drop by more than 0.03 (both classes),
     3. per-fold PPV (seed-averaged) improves in the majority of folds (>= 3/5).
   A drop > 0.01 in the other class's PPV is reported as a warning, not a veto.
+
+Deployment target: chest-strap wearable (decided 2026-10-13). From E17 on, the
+rule above is applied primarily to MIT-BIH OOF patients under degradation
+(Polar H10 simulation and REAL NSTDB noise, scripts/eval_robustness.py), with a
+clean-signal guard: clean MIT F1-macro may not drop by more than 0.02 and
+clean Se by more than 0.03.
 """
 
 from __future__ import annotations

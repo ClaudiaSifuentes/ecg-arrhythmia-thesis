@@ -16,6 +16,9 @@ in src/data/domain_shift_sim.py):
                (±22 ms), edge-padded — the deployed detector does not centre
                beats exactly on the annotation
   polar+shift  both
+  nstdb_*      REAL noise from the MIT-BIH Noise Stress Test DB (src/data/nstdb_noise.py):
+               em / ma / bw at 12 dB, and a random mix of the three at 6 dB
+Also reports the 3-seed ensemble (mean probability), which is what is deployed.
 """
 
 from __future__ import annotations
@@ -46,9 +49,22 @@ def shift_beats(X: np.ndarray, max_shift: int, seed: int) -> np.ndarray:
     return np.take_along_axis(X, idx, axis=1).astype(np.float32)
 
 
+_NSTDB = None
+NSTDB_PERTURB = {"nstdb_em12": (("em",), 12.0), "nstdb_ma12": (("ma",), 12.0), "nstdb_bw12": (("bw",), 12.0),
+                 "nstdb_all6": (("bw", "em", "ma"), 6.0)}
+
+
 def perturb(name: str, X: np.ndarray, seed: int) -> np.ndarray:
+    global _NSTDB
     if name == "clean":
         return X
+    if name in NSTDB_PERTURB:
+        from src.data.nstdb_noise import add_nstdb_noise, load_nstdb_noise
+
+        if _NSTDB is None:
+            _NSTDB = load_nstdb_noise()
+        types, snr = NSTDB_PERTURB[name]
+        return add_nstdb_noise(X, _NSTDB, types, snr, seed)
     if name == "polar_sim":
         return simulate_polar_h10_degradation(X, seed=seed)
     if name == "shift8":
@@ -61,7 +77,8 @@ def perturb(name: str, X: np.ndarray, seed: int) -> np.ndarray:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp", nargs="+", required=True)
-    ap.add_argument("--perturb", nargs="+", default=["clean", "polar_sim", "shift8", "polar+shift"])
+    ap.add_argument("--perturb", nargs="+",
+                    default=["clean", "polar_sim", "nstdb_em12", "nstdb_ma12", "nstdb_bw12", "nstdb_all6"])
     args = ap.parse_args()
     out_dir = Path("reports") / "robustness"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -80,7 +97,8 @@ def main():
             for k in range(K):
                 te = fold == k
                 Xp[pname][te] = perturb(pname, data.X_beats[te], seed=1000 + k)
-        res = {p: {"all": [], "mit": []} for p in args.perturb}
+        res = {p: {"all": [], "mit": [], "ens_all": None, "ens_mit": None} for p in args.perturb}
+        ens_prob = {p: np.zeros((len(data.y), 3), dtype=np.float64) for p in args.perturb}
         for s in cfg["seeds"]:
             prob = {p: np.zeros((len(data.y), 3), dtype=np.float32) for p in args.perturb}
             for k in range(K):
@@ -91,10 +109,15 @@ def main():
                 for p in args.perturb:
                     prob[p][te] = softmax(predict_logits(m, Xp[p][te], data.X_rr[te]))
             for p in args.perturb:
+                ens_prob[p] += prob[p] / len(cfg["seeds"])
                 pred = decide_from_config(prob[p], cfg["decision"])
                 res[p]["all"].append(class_metrics(data.y, pred))
                 res[p]["mit"].append(class_metrics(data.y[mit], pred[mit]))
             print(f"[{exp}] seed {s} done", flush=True)
+        for p in args.perturb:
+            pred = decide_from_config(ens_prob[p], cfg["decision"])
+            res[p]["ens_all"] = class_metrics(data.y, pred)
+            res[p]["ens_mit"] = class_metrics(data.y[mit], pred[mit])
 
         lines = [f"# Robustez — {exp}", "", f"Regla: {cfg['decision']}. Pacientes OOF (cada modelo evalúa solo su fold).", ""]
         for view in ("all", "mit"):
@@ -109,6 +132,11 @@ def main():
                     d = f" (Δ{np.mean(v) - base[k]:+.3f})" if base and p != "clean" else ""
                     cells.append(f"{np.mean(v):.3f} [{min(v):.3f}–{max(v):.3f}]{d}")
                 lines.append(f"| {p} | " + " | ".join(cells) + " |")
+            lines += ["", f"Ensamble de {len(cfg['seeds'])} semillas (lo que se despliega):", "",
+                      "| perturbación | " + " | ".join(KEYS) + " |", "|---|" + "---|" * len(KEYS)]
+            for p in args.perturb:
+                e = res[p][f"ens_{view}"]
+                lines.append(f"| {p} | " + " | ".join(f"{e[k]:.3f}" for k in KEYS) + " |")
             lines.append("")
         (out_dir / f"{exp}.md").write_text("\n".join(lines))
         (out_dir / f"{exp}.json").write_text(json.dumps(res, default=float))
