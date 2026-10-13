@@ -94,3 +94,22 @@ Con SVDB la prevalencia de SVEB subió ~2.6×; α=8 sobrepredecía SVEB. Con α=
 Test fijo, ensamble E16 argmax: completo F1-macro 0.774, SVEB Se 0.249 / PPV 0.978, VEB Se 0.983 / PPV 0.963; sin 232 (SVEB n=61): Se 0.033 / PPV 0.222. (E15 con t=0.54 en test: F1-macro 0.784, SVEB Se 0.278 / PPV 0.964; sin 232 Se 0.016 / PPV 0.071.) El test sigue sin discriminar entre modelos.
 
 **Candidato actual: E16 (MIT-BIH + INCART deriv. II + SVDB, RR de contexto, focal γ=2 α=[1,3,3]), ensamble de 3 semillas, argmax.** Siguiente: robustez (E17, augmentation) medida con `scripts/eval_robustness.py`.
+
+## E17 — augmentation en entrenamiento (folds pareados con E16) + robustez
+
+Robustez medida con `scripts/eval_robustness.py`: cada modelo de CV re-evalúa **sus propios pacientes OOF** con la señal degradada (simulación Polar H10: 130 Hz, deriva, movimiento, ruido de contacto escalonado; y error de centrado ±22 ms). Argmax, media de 3 semillas [mín–máx].
+
+| vista | señal | modelo | F1-macro | SVEB Se | SVEB PPV | SVEB F1 | VEB Se | VEB PPV | VEB F1 |
+|---|---|---|---|---|---|---|---|---|---|
+| MIT-BIH | limpia | E16 | **0.716** [0.710–0.724] | 0.452 | **0.314** [0.291–0.336] | **0.370** | 0.841 | **0.767** | **0.802** |
+| MIT-BIH | limpia | E17 | 0.700 [0.694–0.704] | 0.435 | 0.274 [0.248–0.289] | 0.336 | 0.840 | 0.748 | 0.791 |
+| MIT-BIH | Polar sim | E16 | 0.619 [0.586–0.644] | 0.362 | 0.171 [0.081–0.315] | 0.202 | 0.590 | 0.854 | 0.698 |
+| MIT-BIH | Polar sim | E17 | **0.672** [0.655–0.687] | **0.421** | **0.214** [0.169–0.261] | **0.283** | **0.763** | 0.764 | **0.763** |
+| pool | limpia | E16 | 0.764 [0.757–0.768] | 0.504 | 0.506 | 0.505 | 0.883 | 0.757 | 0.815 |
+| pool | limpia | E17 | 0.772 [0.765–0.781] | 0.527 | 0.517 | 0.522 | 0.883 | 0.767 | 0.821 |
+| pool | Polar sim | E16 | 0.684 [0.673–0.698] | 0.381 | 0.349 | 0.329 | 0.678 | 0.879 | 0.765 |
+| pool | Polar sim | E17 | **0.754** [0.749–0.759] | **0.496** | **0.460** | **0.477** | **0.831** | 0.799 | **0.814** |
+
+El error de centrado (±22 ms) no afecta a ninguno (Δ ≤ 0.01). Test fijo, ensamble: E17 F1-macro 0.789, SVEB Se 0.282 / PPV 0.978 (E16: 0.774, 0.249 / 0.978).
+
+**Lectura E17.** Con señal limpia de MIT-BIH empeora la PPV de SVEB (−0.040, 1/5 folds) → **no se adopta como reemplazo según la regla**. Bajo la degradación simulada tipo Polar H10 es claramente más robusto (F1-macro MIT +0.053; VEB Se +0.17). Si el despliegue es un wearable de pecho, E17 es preferible; la decisión depende del dispositivo. Siguiente propuesta: E18 (augmentation más suave, p=0.25 sin desplazamiento) para buscar ambas cosas.
