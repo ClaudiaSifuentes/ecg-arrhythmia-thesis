@@ -18,6 +18,7 @@ data/processed/mitbih_incart/
 reports/*
 !reports/AUDIT.md
 !reports/RESULTS.md
+!reports/MODEL_CARD_E16.md
 !reports/experiments_log.csv
 !reports/oof/
 !reports/thresholds/
