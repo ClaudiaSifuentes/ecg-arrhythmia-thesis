@@ -151,3 +151,34 @@ Ensamble de 3 semillas (lo que se despliega), pacientes MIT-BIH OOF, argmax. em 
 
 # Cierre de la etapa de iteración
 **Modelo final: E16, ensamble de 3 semillas, argmax** → `reports/MODEL_CARD_E16.md`. Se probaron los ítems del plan en este orden: protocolo, umbral, contexto RR, más datos de SVEB (INCART con derivación II y SVDB), α de la focal loss, ensamble y calibración, y augmentation sintética y real. Quedan sin probar el label smoothing y los ajustes de arquitectura. Según el plan, estos van solo si lo anterior se agota.
+
+# Comparación con la literatura — protocolo DS1 → DS2 (de Chazal)
+
+Entrenado con DS1 (22 registros MIT-BIH, más INCART II y SVDB en la variante "ext"), con el umbral SVEB elegido en una validación interna de DS1, y **evaluado en DS2 (22 registros) sin haberlo mirado**. Ensamble de 3 semillas, argmax. El proyecto agrupa F con VEB (los papers lo dejan aparte).
+
+| método | VEB Se / PPV | SVEB Se / PPV | SVEB F1 |
+|---|---|---|---|
+| de Chazal 2004 | 77.7 / 81.9 | 75.9 / 38.5 | 0.51 |
+| Llamedo 2011 | 82.9 / 88.0 | 76.5 / 41.3 | 0.53 |
+| Zhang 2014 | 85.5 / 92.8 | 79.1 / 36.0 | 0.495 |
+| E12 (solo DS1 MIT-BIH) | 81.4 / 87.8 | 18.0 / 7.3 | 0.10 |
+| E16 (solo DS1 MIT-BIH) | 76.8 / 91.8 | 5.1 / 14.6 | 0.08 |
+| E16 (DS1 + INCART II + SVDB) | 81.6 / **93.7** | 26.4 / 34.5 | 0.30 |
+| **E20 (DS1 + INCART II + SVDB)** | **83.9** / 91.3 | 26.3 / 35.1 | 0.30 |
+| *E20 ext, DS2 sin el registro 232* | 83.9 / 92.3 | **65.8** / 24.9 | 0.36 |
+
+**Lectura.** En VEB el modelo está a la altura de la literatura, con mejor PPV que de Chazal y Llamedo. En SVEB queda muy por debajo, y casi toda la diferencia viene de **un solo registro, el 232**: tiene ≈1 380 de los ≈1 830 SVEB de DS2, y el modelo detecta pocos de ellos. Sin el 232, la Se de SVEB sube a 0.66 con PPV 0.25. En el 232 los SVEB son el ritmo **mayoritario** (≈78 % de sus latidos), así que cualquier referencia "del ritmo propio del paciente" (la media de 50 o la mediana de 300) se calcula sobre los mismos SVEB y no los marca como prematuros. Entrenado solo con DS1, la CNN generaliza muy mal en SVEB (Se 0.05): con tan pocos pacientes con SVEB, la morfología no alcanza. Los métodos clásicos con RR y un clasificador lineal generalizan mejor en esa condición.
+
+## E20 — RR / mediana de 300 latidos (folds pareados con E16)
+
+| vista MIT, 3 semillas | E16 | **E20** |
+|---|---|---|
+| F1-macro | 0.716 [0.710–0.724] | **0.727** [0.713–0.735] |
+| SVEB Se | 0.452 [0.433–0.481] | **0.487** [0.457–0.540] |
+| SVEB PPV | 0.314 [0.291–0.336] | **0.360** [0.350–0.372] (4/5 folds) |
+| SVEB F1 | 0.370 | **0.414** |
+| AP SVEB | 0.350 | **0.415** |
+| VEB Se / PPV | 0.841 / 0.767 | 0.845 / 0.748 |
+| Ensamble con ruido real (em 12 dB): F1m, SVEB PPV | 0.698, 0.301 | **0.714, 0.360** |
+
+**Se adopta E20.** Advertencia: en el test fijo (que incluye el 232), la Se de SVEB del ensamble baja de 0.249 a 0.130 por el problema descrito arriba. En DS2 queda igual que E16. El test no se usa para decidir, pero este modo de falla se documenta.

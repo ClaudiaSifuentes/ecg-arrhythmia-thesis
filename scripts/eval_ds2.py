@@ -121,6 +121,8 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
     (out.with_suffix(".json")).write_text(json.dumps([(a, b, c, d) for a, b, c, d in rows], default=float))
+    np.savez_compressed(out.with_suffix(".npz"), y=y_te, record=rec[te], prob=np.stack(probs_te),
+                        val_y=y_va, val_prob=np.stack(probs_va))
     print("\n".join(lines))
 
 
