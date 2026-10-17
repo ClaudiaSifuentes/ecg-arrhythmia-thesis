@@ -1,0 +1,56 @@
+{
+  "exp_id": "E17_aug",
+  "data_dir": "data/processed/mitbih_incartII_svdb",
+  "exclude_patients": [],
+  "model": {
+    "dropout": 0.5,
+    "use_rr": true
+  },
+  "loss": {
+    "type": "focal",
+    "gamma": 2.0,
+    "alpha": [
+      1.0,
+      3.0,
+      3.0
+    ],
+    "label_smoothing": 0.0
+  },
+  "optim": {
+    "lr": 0.0005,
+    "weight_decay": 0.0001,
+    "batch_size": 256,
+    "max_epochs": 50,
+    "patience": 8,
+    "lr_patience": 7,
+    "lr_factor": 0.5
+  },
+  "cv": {
+    "n_splits": 5,
+    "split_seed": 42,
+    "inner_val_frac_splits": 5,
+    "fold_map": "configs/cv_folds_E14.json"
+  },
+  "features": {
+    "rr_set": "context"
+  },
+  "augment": {
+    "p": 0.5,
+    "gauss_std": 0.04,
+    "baseline_amp": 0.15,
+    "shift_max": 8,
+    "scale": 0.1
+  },
+  "decision": {
+    "t_sveb": null,
+    "t_veb": null
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "num_threads": 1,
+  "compile": true,
+  "device": "auto"
+}
