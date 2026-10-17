@@ -134,3 +134,20 @@ Ensamble de 3 semillas (lo que se despliega), pacientes MIT-BIH OOF, argmax. em 
 **Lectura.** La augmentation sintética (E17, E18) solo ayuda con el simulador sintético, cuyo ruido se parece al de la propia augmentation. **Con ruido real no ayuda: E16 queda igual o mejor en todas las condiciones.** Se revierte la adopción provisional de E17 y **E16 sigue siendo el candidato**. Para la tesis: evaluar la robustez solo con ruido simulado puede llevar a conclusiones equivocadas.
 
 **Cambio de protocolo:** desde aquí cada registro de NSTDB se divide en el tiempo. La 1.ª mitad queda para entrenamiento (E19) y la 2.ª mitad solo para evaluación. Las robusteces de E16, E17 y E18 se recalculan con la 2.ª mitad (sección 18 del notebook) para que la comparación con E19 sea limpia.
+
+## E19 — augmentation con ruido REAL (NSTDB 1.ª mitad), evaluado con la 2.ª mitad
+
+| vista MIT, 3 semillas | señal | E16 | E19 |
+|---|---|---|---|
+| F1-macro | limpia | **0.716** [0.710–0.724] | 0.688 [0.672–0.709] |
+| SVEB PPV | limpia | **0.314** [0.291–0.336] | 0.250 [0.194–0.279] (0/5 folds mejor) |
+| F1-macro | músculo 12 dB | 0.632 | **0.674** |
+| SVEB PPV / Se | músculo 12 dB | 0.252 / 0.297 | 0.235 / **0.418** |
+| F1-macro | mezcla 6 dB | 0.582 | **0.637** |
+| VEB PPV / Se | mezcla 6 dB | 0.539 / 0.562 | **0.596 / 0.790** |
+| SVEB PPV | electrodo / deriva 12 dB | **0.275 / 0.257** | 0.242 / 0.232 |
+
+**Decisión: no adoptar.** Con señal limpia, E19 baja el F1-macro 0.028, por encima del margen de 0.02, y baja la PPV de SVEB en todos los folds. Con ruido real gana sensibilidad cuando el ruido es fuerte, pero la PPV de SVEB baja en 3 de las 4 condiciones.
+
+# Cierre de la etapa de iteración
+**Modelo final: E16, ensamble de 3 semillas, argmax** → `reports/MODEL_CARD_E16.md`. Se probaron los ítems del plan en este orden: protocolo, umbral, contexto RR, más datos de SVEB (INCART con derivación II y SVDB), α de la focal loss, ensamble y calibración, y augmentation sintética y real. Quedan sin probar el label smoothing y los ajustes de arquitectura. Según el plan, estos van solo si lo anterior se agota.

@@ -48,3 +48,34 @@ def test_inner_split_is_patient_disjoint():
     tr, va = inner_split(y, pid, 5, 1)
     assert set(pid[tr]).isdisjoint(set(pid[va]))
     assert len(np.unique(y[va])) == 3
+
+
+def test_rr_features_from_peaks_match_training_path():
+    from src.data.rr_context import build_rr_features
+    from src.data.rr_features import extract_rr_features
+    from src.inference.heartly_e16 import rr_features_from_peaks
+
+    rng = np.random.default_rng(0)
+    peaks = np.cumsum(rng.integers(200, 400, size=120))
+    a = rr_features_from_peaks(peaks)
+    b = build_rr_features(extract_rr_features(peaks), np.full(120, "p"), "context")
+    assert a.shape == (120, 6) and np.array_equal(a, b)
+
+
+def test_heartly_e16_ensemble_interface(tmp_path):
+    import torch
+
+    from src.inference.heartly_e16 import HeartlyE16
+    from src.models.fusion import FusionClassifier
+
+    paths = []
+    for s in range(3):
+        torch.manual_seed(s)
+        p = tmp_path / f"seed{s}.pt"
+        torch.save(FusionClassifier().state_dict(), p)
+        paths.append(p)
+    clf = HeartlyE16(paths)
+    Xb, Xr, _ = _toy(50)
+    cls, prob = clf.predict(Xb, Xr)
+    assert cls.shape == (50,) and prob.shape == (50, 3)
+    assert np.allclose(prob.sum(1), 1, atol=1e-5) and set(cls) <= {0, 1, 2}
