@@ -25,6 +25,7 @@ reports/*
 !reports/test/
 !reports/cv/
 !reports/robustness/
+!reports/ds2/
 reports/cv/*/part_*.npz
 reports/cv/*/log_*.txt
 models/cv/

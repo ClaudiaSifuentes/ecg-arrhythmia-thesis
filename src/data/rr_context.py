@@ -5,6 +5,8 @@ The model interface is fixed at 6 RR inputs. Alternative feature sets keep the
 requires the same transform in the deployed preprocessing.
 
 "base" (E12): [RR_actual, RR_prev, RR_mean_local(5), SDNN(5), RMSSD(5), RR_actual/RR_prev]
+"context" (E13–E19): [RR, RR_next, RR_mean5, RR/RR_mean50, RR_next/RR, RR/RR_prev]
+"context2" (E20): as "context" with RR/RR_mean50 -> RR/RR_median300
 
 Rows of one patient are stored in time order; consecutive beats are
 contiguous when X_rr[i+1, RR_prev] == X_rr[i, RR_actual] (99.6 % of rows in
@@ -37,6 +39,18 @@ def _rolling_mean_per_patient(x: np.ndarray, pid: np.ndarray, window: int) -> np
     return out
 
 
+def _rolling_median_per_patient(x: np.ndarray, pid: np.ndarray, window: int) -> np.ndarray:
+    """Causal median of the last `window` values (current included), per patient."""
+
+    import pandas as pd
+
+    out = np.empty(len(x), dtype=np.float64)
+    for p in np.unique(pid):
+        idx = np.nonzero(pid == p)[0]
+        out[idx] = pd.Series(x[idx]).rolling(window, min_periods=1).median().to_numpy()
+    return out
+
+
 def build_rr_features(X_rr: np.ndarray, patient_id: np.ndarray, rr_set: str = "base") -> np.ndarray:
     X_rr = np.asarray(X_rr, dtype=np.float32)
     if rr_set == "base":
@@ -63,4 +77,14 @@ def build_rr_features(X_rr: np.ndarray, patient_id: np.ndarray, rr_set: str = "b
             X_rr[:, 5],
         ], axis=1)
         return out.astype(np.float32)
+    if rr_set == "context2":
+        # "context" with RR/RR_mean50 replaced by RR/RR_median300 (~4–5 min): a long,
+        # outlier-robust reference to the patient's own rhythm, so beats inside SVEB
+        # runs (no compensatory pause, RR ≈ RR_prev) still look premature. Dev-set
+        # AUC SVEB vs N: 0.942 -> 0.949 overall, 0.847 -> 0.918 for beats in runs.
+        ctx = build_rr_features(X_rr, patient_id, "context")
+        valid = rr > 0
+        med = _rolling_median_per_patient(np.where(valid, rr, np.nan), pid, 300)
+        ctx[:, 3] = np.where(valid & np.isfinite(med), rr / (med + eps), 1.0).astype(np.float32)
+        return ctx
     raise ValueError(f"unknown rr_set={rr_set}")

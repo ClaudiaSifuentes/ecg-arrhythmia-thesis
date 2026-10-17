@@ -1,0 +1,9 @@
+# ONE change vs E16_alpha3 (current candidate): RR input 4 becomes
+# RR / median of the last 300 RR (~4–5 min) instead of RR / mean of the last 50.
+# Motivation (dev patients only, e.g. record 209 / INCART P15): SVEB inside runs
+# have no compensatory pause and RR ≈ RR_prev, so only a long, robust reference
+# to the patient's base rhythm marks them as premature (AUC 0.847 -> 0.918).
+# Still 6 RR inputs; deployment needs the same transform (rr_features_from_peaks).
+inherit: E16_alpha3.yaml
+exp_id: E20_rrmed300
+features: {rr_set: context2}

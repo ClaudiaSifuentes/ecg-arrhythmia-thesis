@@ -38,11 +38,11 @@ from src.models.fusion import FusionClassifier
 CLASSES = ("N", "SVEB", "VEB")
 
 
-def rr_features_from_peaks(r_peaks: np.ndarray, fs: int = 360) -> np.ndarray:
-    """6 context RR features per detected R peak, identical to training."""
+def rr_features_from_peaks(r_peaks: np.ndarray, fs: int = 360, rr_set: str = "context") -> np.ndarray:
+    """6 RR features per detected R peak, identical to training ("context" for E16)."""
 
     base = extract_rr_features(np.asarray(r_peaks), fs=fs)
-    return build_rr_features(base, np.full(len(base), "stream"), "context")
+    return build_rr_features(base, np.full(len(base), "stream"), rr_set)
 
 
 class HeartlyE16:
