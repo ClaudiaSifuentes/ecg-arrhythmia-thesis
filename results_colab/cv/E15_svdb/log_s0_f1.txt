@@ -1,0 +1,13 @@
+fold 1 seed 0: train 256315 beats/111 pts, inner-val 68053/30 pts [np.str_('inc_I15'), np.str_('inc_I16'), np.str_('inc_I17'), np.str_('inc_I18'), np.str_('inc_I19'), np.str_('inc_I25'), np.str_('inc_I26'), np.str_('inc_I27'), np.str_('inc_I28'), np.str_('inc_I72'), np.str_('inc_I73'), np.str_('inc_I74'), np.str_('inc_I75'), np.str_('mit_116'), np.str_('mit_117'), np.str_('mit_122'), np.str_('mit_205'), np.str_('mit_210'), np.str_('mit_212'), np.str_('mit_221'), np.str_('svdb_806'), np.str_('svdb_823'), np.str_('svdb_828'), np.str_('svdb_849'), np.str_('svdb_874'), np.str_('svdb_878'), np.str_('svdb_879'), np.str_('svdb_881'), np.str_('svdb_884'), np.str_('svdb_892')], test 92569/39 pts [np.str_('inc_I01'), np.str_('inc_I02'), np.str_('inc_I20'), np.str_('inc_I21'), np.str_('inc_I22'), np.str_('inc_I23'), np.str_('inc_I24'), np.str_('inc_I31'), np.str_('inc_I44'), np.str_('inc_I45'), np.str_('inc_I46'), np.str_('inc_I49'), np.str_('inc_I50'), np.str_('inc_I51'), np.str_('inc_I52'), np.str_('inc_I53'), np.str_('inc_I59'), np.str_('inc_I60'), np.str_('inc_I61'), np.str_('mit_114'), np.str_('mit_115'), np.str_('mit_207'), np.str_('mit_209'), np.str_('mit_223'), np.str_('svdb_800'), np.str_('svdb_808'), np.str_('svdb_812'), np.str_('svdb_826'), np.str_('svdb_842'), np.str_('svdb_846'), np.str_('svdb_851'), np.str_('svdb_854'), np.str_('svdb_862'), np.str_('svdb_863'), np.str_('svdb_864'), np.str_('svdb_868'), np.str_('svdb_871'), np.str_('svdb_887'), np.str_('svdb_894')]
+  ep01 train=0.20342 val=0.15012 lr=5.0e-04 (15.9s)
+  ep02 train=0.13097 val=0.16322 lr=5.0e-04 (15.8s)
+  ep03 train=0.11583 val=0.13230 lr=5.0e-04 (15.4s)
+  ep04 train=0.10847 val=0.15956 lr=5.0e-04 (15.2s)
+  ep05 train=0.10216 val=0.16492 lr=5.0e-04 (15.2s)
+  ep06 train=0.09855 val=0.13592 lr=5.0e-04 (15.4s)
+  ep07 train=0.09388 val=0.20115 lr=5.0e-04 (15.5s)
+  ep08 train=0.09000 val=0.15748 lr=5.0e-04 (15.5s)
+  ep09 train=0.08684 val=0.14291 lr=5.0e-04 (15.4s)
+  ep10 train=0.08452 val=0.16418 lr=5.0e-04 (15.4s)
+  ep11 train=0.08299 val=0.20865 lr=2.5e-04 (15.3s)
+done in 170s best_epoch=3

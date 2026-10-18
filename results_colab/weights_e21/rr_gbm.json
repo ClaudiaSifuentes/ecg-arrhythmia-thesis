@@ -1,0 +1,1 @@
+{"rr_model": "gbm", "w": 0.25, "cv_exp": "E21_hybrid_gbm", "decision": {"t_sveb": 0.4, "t_veb": 0.47}}

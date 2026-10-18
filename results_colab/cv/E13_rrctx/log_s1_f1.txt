@@ -1,0 +1,14 @@
+fold 1 seed 1: train 132825 beats/63 pts, inner-val 47012/20 pts [np.str_('inc_I35'), np.str_('inc_I36'), np.str_('inc_I37'), np.str_('inc_I42'), np.str_('inc_I43'), np.str_('inc_I49'), np.str_('inc_I50'), np.str_('inc_I51'), np.str_('inc_I52'), np.str_('inc_I53'), np.str_('inc_I54'), np.str_('inc_I55'), np.str_('inc_I56'), np.str_('inc_I68'), np.str_('inc_I69'), np.str_('mit_108'), np.str_('mit_114'), np.str_('mit_212'), np.str_('mit_213'), np.str_('mit_222')], test 42295/19 pts [np.str_('inc_I01'), np.str_('inc_I02'), np.str_('inc_I33'), np.str_('inc_I34'), np.str_('inc_I40'), np.str_('inc_I41'), np.str_('inc_I59'), np.str_('inc_I60'), np.str_('inc_I61'), np.str_('inc_I72'), np.str_('inc_I73'), np.str_('mit_111'), np.str_('mit_112'), np.str_('mit_124'), np.str_('mit_203'), np.str_('mit_207'), np.str_('mit_209'), np.str_('mit_214'), np.str_('mit_223')]
+  ep01 train=0.18256 val=0.29984 lr=5.0e-04 (8.0s)
+  ep02 train=0.12465 val=0.25136 lr=5.0e-04 (8.1s)
+  ep03 train=0.10849 val=0.23927 lr=5.0e-04 (8.2s)
+  ep04 train=0.09950 val=0.18425 lr=5.0e-04 (8.2s)
+  ep05 train=0.09411 val=0.29564 lr=5.0e-04 (8.2s)
+  ep06 train=0.08630 val=0.18813 lr=5.0e-04 (8.0s)
+  ep07 train=0.08000 val=0.21316 lr=5.0e-04 (8.0s)
+  ep08 train=0.07630 val=0.24195 lr=5.0e-04 (8.0s)
+  ep09 train=0.07659 val=0.22068 lr=5.0e-04 (8.0s)
+  ep10 train=0.07381 val=0.26827 lr=5.0e-04 (8.0s)
+  ep11 train=0.07270 val=0.26741 lr=5.0e-04 (8.0s)
+  ep12 train=0.06905 val=0.21771 lr=2.5e-04 (8.0s)
+done in 97s best_epoch=4

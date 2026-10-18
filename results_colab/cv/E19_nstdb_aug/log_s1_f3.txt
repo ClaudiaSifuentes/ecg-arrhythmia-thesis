@@ -1,0 +1,11 @@
+fold 3 seed 1: train 267015 beats/116 pts, inner-val 69599/30 pts [np.str_('inc_I03'), np.str_('inc_I04'), np.str_('inc_I05'), np.str_('inc_I15'), np.str_('inc_I20'), np.str_('inc_I21'), np.str_('inc_I22'), np.str_('inc_I23'), np.str_('inc_I24'), np.str_('inc_I68'), np.str_('inc_I69'), np.str_('inc_I70'), np.str_('inc_I71'), np.str_('mit_207'), np.str_('mit_208'), np.str_('mit_222'), np.str_('mit_223'), np.str_('svdb_800'), np.str_('svdb_803'), np.str_('svdb_805'), np.str_('svdb_806'), np.str_('svdb_812'), np.str_('svdb_823'), np.str_('svdb_843'), np.str_('svdb_853'), np.str_('svdb_857'), np.str_('svdb_868'), np.str_('svdb_869'), np.str_('svdb_881'), np.str_('svdb_885')], test 80323/34 pts [np.str_('inc_I10'), np.str_('inc_I11'), np.str_('inc_I13'), np.str_('inc_I14'), np.str_('inc_I63'), np.str_('inc_I64'), np.str_('inc_I74'), np.str_('inc_I75'), np.str_('mit_103'), np.str_('mit_116'), np.str_('mit_118'), np.str_('mit_119'), np.str_('mit_122'), np.str_('mit_124'), np.str_('mit_200'), np.str_('mit_210'), np.str_('mit_215'), np.str_('mit_219'), np.str_('svdb_801'), np.str_('svdb_822'), np.str_('svdb_829'), np.str_('svdb_840'), np.str_('svdb_845'), np.str_('svdb_847'), np.str_('svdb_850'), np.str_('svdb_856'), np.str_('svdb_858'), np.str_('svdb_859'), np.str_('svdb_865'), np.str_('svdb_875'), np.str_('svdb_877'), np.str_('svdb_879'), np.str_('svdb_880'), np.str_('svdb_889')]
+  ep01 train=0.13004 val=0.24202 lr=5.0e-04 (26.3s)
+  ep02 train=0.08544 val=0.30432 lr=5.0e-04 (26.4s)
+  ep03 train=0.07893 val=0.27645 lr=5.0e-04 (26.5s)
+  ep04 train=0.07457 val=0.27433 lr=5.0e-04 (26.6s)
+  ep05 train=0.06963 val=0.25580 lr=5.0e-04 (26.4s)
+  ep06 train=0.06764 val=0.25484 lr=5.0e-04 (26.0s)
+  ep07 train=0.06683 val=0.28170 lr=5.0e-04 (25.9s)
+  ep08 train=0.06373 val=0.28451 lr=5.0e-04 (26.4s)
+  ep09 train=0.06205 val=0.24797 lr=2.5e-04 (26.9s)
+done in 238s best_epoch=1
