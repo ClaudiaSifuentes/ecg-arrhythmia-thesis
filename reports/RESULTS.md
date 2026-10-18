@@ -182,3 +182,31 @@ Entrenado con DS1 (22 registros MIT-BIH, más INCART II y SVDB en la variante "e
 | Ensamble con ruido real (em 12 dB): F1m, SVEB PPV | 0.698, 0.301 | **0.714, 0.360** |
 
 **Se adopta E20.** Advertencia: en el test fijo (que incluye el 232), la Se de SVEB del ensamble baja de 0.249 a 0.130 por el problema descrito arriba. En DS2 queda igual que E16. El test no se usa para decidir, pero este modo de falla se documenta.
+
+## E21 — híbrido CNN (E20) + modelo solo-RR (folds y validación interna de E20)
+
+Un solo cambio sobre E20: se promedia la probabilidad de la CNN con la de un modelo que ve **solo las 6 entradas RR** (las mismas que ya recibe la CNN, sin señal nueva): p = (1 − w)·p_CNN + w·p_RR. El modelo RR se entrena en cada fold con exactamente los latidos con los que se entrenó la CNN. El peso w se elige por (semilla, fold) en la validación interna (mediana 0.25 con gradient boosting). Los umbrales también salen de la validación interna: t_SVEB 0.40 y t_VEB 0.47 son la mediana de las 15 elecciones. E20 usa los suyos, 0.43 / 0.60, elegidos igual. No se miró ningún paciente OOF para elegir nada. Script: `scripts/hybrid_rr.py`; OOF: `reports/oof/oof_E21_hybrid_gbm.npz`.
+
+| vista MIT (37 sujetos), 3 semillas | E20 argmax | E20 umbrales val (0.43/0.60) | **E21 gbm, umbrales val (0.40/0.47)** |
+|---|---|---|---|
+| F1-macro | 0.727 [0.713–0.735] | 0.726 [0.721–0.732] | **0.745** [0.739–0.753] |
+| SVEB Se | 0.487 [0.457–0.540] | **0.627** [0.568–0.676] | 0.604 [0.574–0.643] |
+| SVEB PPV | 0.360 [0.350–0.372] | 0.307 [0.294–0.322] | **0.367** [0.363–0.370] |
+| SVEB F1 | 0.414 [0.396–0.440] | 0.412 [0.388–0.436] | **0.456** [0.448–0.464] |
+| VEB Se | **0.845** [0.835–0.858] | 0.741 [0.721–0.756] | 0.796 [0.772–0.809] |
+| VEB PPV | 0.748 [0.700–0.801] | **0.848** [0.814–0.915] | 0.812 [0.788–0.857] |
+| AP SVEB / PPV con Se = 0.5 | 0.415 / 0.394 | (igual) | **0.422 / 0.426** |
+| AP VEB / PPV con Se = 0.85 | 0.844 / 0.739 | (igual) | **0.852 / 0.763** |
+
+Comparación fold a fold (E21 contra E20, ambos con sus umbrales de validación): SVEB PPV +0.060 (3/5 folds), F1 +0.044, Se −0.023. VEB Se +0.055 (4/5), PPV −0.036 (0/5, aviso). **Cumple la regla en la vista MIT.** Con umbrales anidados por fold (`nested_both`) también la cumple: SVEB PPV +0.057 (4/5), Se −0.020, VEB Se +0.042. Si ambos usan argmax, no la cumple: la Se de VEB baja 0.045.
+
+Otras vistas (E21 contra E20, ambos con sus umbrales de validación):
+
+| vista | SVEB Se | SVEB PPV | SVEB F1 | VEB Se | VEB PPV | regla |
+|---|---|---|---|---|---|---|
+| sin SVDB (66 sujetos) | −0.012 | **+0.059** (3/5) | +0.046 | +0.057 | −0.014 | cumple |
+| pool completo (144) | **−0.069** (1/5) | +0.032 | −0.013 | +0.061 | −0.036 | **no cumple** |
+
+Con regresión logística en lugar de gradient boosting no sirve: AP SVEB 0.415 → 0.384 y Se de VEB −0.046 → descartado.
+
+**Lectura.** El modelo RR mejora el *ranking* (sube el AP y la PPV a Se fija en las dos clases) y, con los umbrales elegidos en validación, la **F1 de SVEB pasa de 0.41 a 0.46 en MIT-BIH**. En los sujetos de SVDB, en cambio, baja la Se de SVEB. SVDB es Holter ambulatorio y se parece al uso del wearable, así que esa baja es un costo real. **Decisión: candidato condicional.** Se adopta solo si en Colab (sección 20) pasa el criterio wearable con ruido real NSTDB (guarda de −0.02 en F1-macro y −0.03 en Se) y si en DS1→DS2 no empeora a E20. Si no, se mantiene E20.

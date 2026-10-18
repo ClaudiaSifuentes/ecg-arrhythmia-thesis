@@ -79,3 +79,34 @@ def test_heartly_e16_ensemble_interface(tmp_path):
     cls, prob = clf.predict(Xb, Xr)
     assert cls.shape == (50,) and prob.shape == (50, 3)
     assert np.allclose(prob.sum(1), 1, atol=1e-5) and set(cls) <= {0, 1, 2}
+
+
+def test_rr_model_hybrid_mix():
+    from src.models.rr_model import W_GRID, choose_w, make_rr_model
+
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 3, size=300)
+    X = np.abs(rng.normal(1.0, 0.2, size=(300, 6))) + 0.3 * (y == 1)[:, None]
+    for kind in ("logreg", "gbm"):
+        p = make_rr_model(kind, [1, 3, 3]).fit(X, y).predict_proba(X)
+        assert p.shape == (300, 3) and np.allclose(p.sum(1), 1)
+    w = choose_w(y, np.full((300, 3), 1 / 3), p)
+    assert w in W_GRID and w > 0  # an uninformative CNN must give weight to the RR model
+
+
+def test_heartly_e21_interface(tmp_path):
+    import joblib
+    import torch
+
+    from src.inference.heartly_e21 import HeartlyE21
+    from src.models.fusion import FusionClassifier
+    from src.models.rr_model import make_rr_model
+
+    torch.manual_seed(0)
+    ck = tmp_path / "seed0.pt"
+    torch.save(FusionClassifier().state_dict(), ck)
+    Xb, Xr, y = _toy(60)
+    joblib.dump(make_rr_model("gbm", [1, 3, 3]).fit(Xr, y), tmp_path / "rr.joblib")
+    clf = HeartlyE21([ck], tmp_path / "rr.joblib", w=0.25, t_sveb=0.40, t_veb=0.47)
+    cls, prob = clf.predict(Xb, Xr)
+    assert cls.shape == (60,) and np.allclose(prob.sum(1), 1, atol=1e-5) and set(cls) <= {0, 1, 2}

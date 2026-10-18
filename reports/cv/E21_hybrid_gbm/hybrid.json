@@ -1,0 +1,27 @@
+{
+ "cnn_exp": "E20_rrmed300",
+ "rr_model": "gbm",
+ "w_chosen": [
+  0.2,
+  0.3,
+  0.25,
+  0.35,
+  0.2,
+  0.2,
+  0.3,
+  0.3,
+  0.35,
+  0.25,
+  0.25,
+  0.25,
+  0.25,
+  0.3,
+  0.05
+ ],
+ "w_deploy": 0.25,
+ "decision": {
+  "t_sveb": 0.4,
+  "t_veb": 0.47
+ },
+ "decision_note": "median of the 15 per-(seed, fold) thresholds chosen on inner validation (max SVEB F1, then max VEB F1)"
+}

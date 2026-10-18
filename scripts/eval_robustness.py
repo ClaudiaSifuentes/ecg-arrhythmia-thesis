@@ -19,6 +19,11 @@ in src/data/domain_shift_sim.py):
   nstdb_*      REAL noise from the MIT-BIH Noise Stress Test DB (src/data/nstdb_noise.py):
                em / ma / bw at 12 dB, and a random mix of the three at 6 dB
 Also reports the 3-seed ensemble (mean probability), which is what is deployed.
+
+--hybrid <hybrid exp> (E21): the CNN probabilities of --exp are mixed with the
+RR-only model's OOF probabilities and the per-(seed, fold) weights stored in
+reports/oof/oof_<hybrid exp>.npz. RR inputs stay clean, so only the CNN branch
+sees the noise. Output: reports/robustness/<hybrid exp>.md
 """
 
 from __future__ import annotations
@@ -77,6 +82,7 @@ def perturb(name: str, X: np.ndarray, seed: int) -> np.ndarray:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp", nargs="+", required=True)
+    ap.add_argument("--hybrid", default=None, help="E21 hybrid OOF to mix with (single --exp)")
     ap.add_argument("--perturb", nargs="+",
                     default=["clean", "polar_sim", "nstdb_em12", "nstdb_ma12", "nstdb_bw12", "nstdb_all6"])
     args = ap.parse_args()
@@ -84,10 +90,18 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    assert not args.hybrid or len(args.exp) == 1, "--hybrid takes one --exp"
     for exp in args.exp:
         cfg = json.loads((Path("reports") / "cv" / exp / "config.json").read_text())
         data = load_dev_data(cfg)
         fold = outer_folds(data, int(cfg["cv"]["n_splits"]), int(cfg["cv"]["split_seed"]), cfg["cv"].get("fold_map"))
+        if args.hybrid:
+            h = np.load(Path("reports") / "oof" / f"oof_{args.hybrid}.npz")
+            assert np.array_equal(h["y"], data.y) and np.array_equal(h["fold"], fold), "hybrid OOF rows != CV rows"
+            p_rr, w_sf = h["p_rr_oof"].astype(np.float64), json.loads(str(h["config"]))["hybrid"]["w_chosen"]
+            hj = json.loads((Path("reports") / "cv" / args.hybrid / "hybrid.json").read_text())
+            if hj.get("decision"):  # deployment thresholds of the hybrid (chosen on inner-val in CV)
+                cfg = dict(cfg, decision=hj["decision"])
         mit = is_mitbih(data.pid)
         K = int(cfg["cv"]["n_splits"])
         # perturbed copies are shared by every model so all see the same noise
@@ -108,6 +122,9 @@ def main():
                 m.to(device)
                 for p in args.perturb:
                     prob[p][te] = softmax(predict_logits(m, Xp[p][te], data.X_rr[te]))
+                    if args.hybrid:  # w_chosen is ordered seed-major, then fold
+                        w = w_sf[cfg["seeds"].index(s) * K + k]
+                        prob[p][te] = (1 - w) * prob[p][te] + w * p_rr[te]
             for p in args.perturb:
                 ens_prob[p] += prob[p] / len(cfg["seeds"])
                 pred = decide_from_config(prob[p], cfg["decision"])
@@ -119,7 +136,8 @@ def main():
             res[p]["ens_all"] = class_metrics(data.y, pred)
             res[p]["ens_mit"] = class_metrics(data.y[mit], pred[mit])
 
-        lines = [f"# Robustez — {exp}", "", f"Regla: {cfg['decision']}. Pacientes OOF (cada modelo evalúa solo su fold).", ""]
+        name = args.hybrid or exp
+        lines = [f"# Robustez — {name}", "", f"Regla: {cfg['decision']}. Pacientes OOF (cada modelo evalúa solo su fold).", ""]
         for view in ("all", "mit"):
             lines += [f"## Vista: {'pool completo' if view == 'all' else 'solo MIT-BIH'}", "",
                       "| perturbación | " + " | ".join(KEYS) + " |", "|---|" + "---|" * len(KEYS)]
@@ -138,8 +156,8 @@ def main():
                 e = res[p][f"ens_{view}"]
                 lines.append(f"| {p} | " + " | ".join(f"{e[k]:.3f}" for k in KEYS) + " |")
             lines.append("")
-        (out_dir / f"{exp}.md").write_text("\n".join(lines))
-        (out_dir / f"{exp}.json").write_text(json.dumps(res, default=float))
+        (out_dir / f"{name}.md").write_text("\n".join(lines))
+        (out_dir / f"{name}.json").write_text(json.dumps(res, default=float))
         print("\n".join(lines))
 
 

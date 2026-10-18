@@ -3,12 +3,18 @@
     python scripts/eval_test.py --config configs/experiments/E12.yaml          # train 3 seeds + test
     python scripts/eval_test.py --config configs/experiments/E12.yaml \
         --checkpoint models/checkpoints/E12_best.pt                           # evaluate an existing model
+    python scripts/eval_test.py --config configs/experiments/E20_rrmed300.yaml \
+        --hybrid E21_hybrid_gbm                                               # E21: CNN + RR model
 
 Training: TRAIN_PATIENTS, early stopping on VAL_PATIENTS (as E12 was trained).
 Decision: the config's rule (same as CV) and argmax for reference.
 Test is reported but NEVER used to choose anything: it is small (6 patients)
 and ~96 % of its SVEB beats come from record 232, so the "excl. 232" view
 is always printed next to it.
+--hybrid <cv exp>: also report the E21 hybrid. The RR model (kind and mixing
+weight w and, if present, the decision thresholds from
+reports/cv/<cv exp>/hybrid.json, i.e. chosen in CV) is trained on
+the same training beats as the CNN and saved next to the CNN weights.
 """
 
 from __future__ import annotations
@@ -56,14 +62,15 @@ def _train(args):
     return out
 
 
-def report(cfg, prob_list, names):
+def report(cfg, prob_list, names, extra_rule=None):
     arr, _, pid, sel = _arrays(cfg)
     te = sel["test"]
     y = arr.y[te]
     keep = pid[te] != "232"
     rows = []
     for name, prob in zip(names, prob_list):
-        for rule_name, rule in (("argmax", {}), ("config", cfg["decision"])):
+        rules = [("argmax", {}), ("config", cfg["decision"])] + ([extra_rule] if extra_rule else [])
+        for rule_name, rule in rules:
             pred = decide_from_config(prob, rule)
             rows.append((name, rule_name, "full", class_metrics(y, pred, prob)))
             rows.append((name, rule_name, "excl232", class_metrics(y[keep], pred[keep], prob[keep])))
@@ -75,6 +82,7 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--checkpoint", default=None)
     ap.add_argument("--jobs", type=int, default=3)
+    ap.add_argument("--hybrid", default=None, help="CV hybrid experiment (reports/cv/<name>/hybrid.json)")
     args = ap.parse_args()
     cfg = load_config(args.config)
     arr, Xr, _, sel = _arrays(cfg)
@@ -105,14 +113,38 @@ def main():
     if len(probs) > 1:
         probs.append(np.mean(probs, axis=0))
         names.append(f"{cfg['exp_id']}_ensemble")
+    if args.hybrid:
+        import joblib
 
-    rows = report(cfg, probs, names)
+        from src.models.rr_model import make_rr_model
+
+        h = json.loads((Path("reports") / "cv" / args.hybrid / "hybrid.json").read_text())
+        # decision (optional): thresholds = median of the per-(seed, fold) inner-val choices of the CV
+        kind, w = h.get("rr_model", "gbm"), float(h["w_deploy"])
+        rr_path = Path(ckpts[0]).parent / f"rr_{kind}.joblib"
+        if rr_path.exists():
+            rr = joblib.load(rr_path)
+        else:
+            tr = sel["train"]
+            rr = make_rr_model(kind, cfg["loss"].get("alpha")).fit(Xr[tr], arr.y[tr])
+            joblib.dump(rr, rr_path)
+            rr_path.with_suffix(".json").write_text(json.dumps({"rr_model": kind, "w": w, "cv_exp": args.hybrid,
+                                                                     "decision": h.get("decision")}))
+        p_rr = rr.predict_proba(Xr[te])
+        probs += [(1 - w) * p + w * p_rr for p in list(probs)]
+        names += [f"{n}+RR{kind}(w={w:.2f})" for n in list(names)]
+
+    extra = None
+    if args.hybrid and h.get("decision"):
+        extra = (f"hybrid CV {h['decision']}", h["decision"])
+    rows = report(cfg, probs, names, extra)
     keys = ("f1_macro", "auc_macro", "sveb_n", "sveb_se", "sveb_ppv", "sveb_f1", "veb_n", "veb_se", "veb_ppv", "veb_f1")
     lines = ["| model | rule | subset | " + " | ".join(keys) + " |", "|" + "---|" * (3 + len(keys))]
     for name, rule, subset, m in rows:
         lines.append(f"| {name} | {rule} | {subset} | " + " | ".join(
             f"{m.get(k, float('nan')):.3f}" if isinstance(m.get(k), float) else str(m.get(k)) for k in keys) + " |")
-    out = Path("reports") / "test" / f"{names[0] if args.checkpoint else cfg['exp_id']}.md"
+    stem = names[0] if args.checkpoint else cfg["exp_id"]
+    out = Path("reports") / "test" / f"{stem}{'_' + args.hybrid if args.hybrid else ''}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(f"Decision rule (config): {cfg['decision']}\n\n" + "\n".join(lines) + "\n")
     print(out.read_text())

@@ -1,6 +1,6 @@
 """Literature-comparable evaluation: de Chazal inter-patient split DS1 -> DS2.
 
-    python scripts/eval_ds2.py --config configs/experiments/E16_alpha3.yaml [--mit_only]
+    python scripts/eval_ds2.py --config configs/experiments/E16_alpha3.yaml [--mit_only] [--hybrid gbm]
 
 Protocol (de Chazal et al. 2004; also Llamedo 2011, Zhang 2014, Mondéjar 2019)
 - DS1 (train, 22 records) and DS2 (test, 22 records) of MIT-BIH; paced records
@@ -12,6 +12,10 @@ Protocol (de Chazal et al. 2004; also Llamedo 2011, Zhang 2014, Mondéjar 2019)
   (max SVEB F1). DS2 is only reported.
 - Reported on DS2: Se / PPV / F1 for SVEB and VEB, also without record 232
   (≈75 % of DS2 SVEB beats), per seed and for the 3-seed ensemble.
+
+--hybrid gbm|logreg (E21): also report CNN + RR-only model. The RR model is
+trained on the same DS1 training beats as the CNN; the mixing weight w is
+chosen on the DS1 inner validation (max macro-F1), like the threshold.
 
 Known caveats (stated in the report):
 - This project maps F (fusion) beats to VEB; most papers keep F separate, which
@@ -52,10 +56,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--mit_only", action="store_true", help="train on MIT-BIH DS1 only (as the literature)")
+    ap.add_argument("--hybrid", choices=["gbm", "logreg"], default=None)
     args = ap.parse_args()
     cfg = load_config(args.config)
     tag = cfg["exp_id"] + ("_ds1mit" if args.mit_only else "_ds1ext")
-    out_dir = Path("models") / "ds2" / tag
+    model_tag = tag
+    if args.hybrid:
+        tag += f"_hyb{args.hybrid}"
+    out_dir = Path("models") / "ds2" / model_tag  # CNN weights shared with the non-hybrid run
     out_dir.mkdir(parents=True, exist_ok=True)
 
     arr = load_processed_arrays(cfg["data_dir"])
@@ -108,6 +116,18 @@ def main():
     for s, pt, pv in zip(cfg["seeds"], probs_te, probs_va):
         add(f"seed{s}", pt, pv)
     add("ensamble", np.mean(probs_te, 0), np.mean(probs_va, 0))
+    if args.hybrid:
+        from src.models.rr_model import choose_w, make_rr_model
+
+        rr = make_rr_model(args.hybrid, cfg["loss"].get("alpha")).fit(Xr[tr], arr.y[tr])
+        r_te, r_va = rr.predict_proba(Xr[te]), rr.predict_proba(Xr[va])
+        add(f"solo RR-{args.hybrid}", r_te, r_va)
+        for s, pt, pv in zip(cfg["seeds"], probs_te, probs_va):
+            w = choose_w(y_va, pv, r_va)
+            add(f"seed{s}+RR (w={w:.2f})", (1 - w) * pt + w * r_te, (1 - w) * pv + w * r_va)
+        pt, pv = np.mean(probs_te, 0), np.mean(probs_va, 0)
+        w = choose_w(y_va, pv, r_va)
+        add(f"ensamble+RR (w={w:.2f})", (1 - w) * pt + w * r_te, (1 - w) * pv + w * r_va)
 
     lines = [f"# DS1 → DS2 (de Chazal) — {tag}", "",
              f"Entrenamiento: {'solo MIT-BIH DS1' if args.mit_only else 'MIT-BIH DS1 + fuentes externas del config'}"
