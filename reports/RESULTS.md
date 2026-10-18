@@ -209,4 +209,37 @@ Otras vistas (E21 contra E20, ambos con sus umbrales de validación):
 
 Con regresión logística en lugar de gradient boosting no sirve: AP SVEB 0.415 → 0.384 y Se de VEB −0.046 → descartado.
 
-**Lectura.** El modelo RR mejora el *ranking* (sube el AP y la PPV a Se fija en las dos clases) y, con los umbrales elegidos en validación, la **F1 de SVEB pasa de 0.41 a 0.46 en MIT-BIH**. En los sujetos de SVDB, en cambio, baja la Se de SVEB. SVDB es Holter ambulatorio y se parece al uso del wearable, así que esa baja es un costo real. **Decisión: candidato condicional.** Se adopta solo si en Colab (sección 20) pasa el criterio wearable con ruido real NSTDB (guarda de −0.02 en F1-macro y −0.03 en Se) y si en DS1→DS2 no empeora a E20. Si no, se mantiene E20.
+**Lectura.** El modelo RR mejora el *ranking* (sube el AP y la PPV a Se fija en las dos clases) y, con los umbrales elegidos en validación, la **F1 de SVEB pasa de 0.41 a 0.46 en MIT-BIH**. En los sujetos de SVDB, en cambio, baja la Se de SVEB. SVDB es Holter ambulatorio y se parece al uso del wearable, así que esa baja es un costo real. **Decisión inicial: candidato condicional.** Se adopta solo si en Colab (sección 20) pasa el criterio wearable con ruido real NSTDB (guarda de −0.02 en F1-macro y −0.03 en Se) y si en DS1→DS2 no empeora a E20. Si no, se mantiene E20.
+
+### E21 — resultado de Colab (sección 20) y decisión final
+
+**Robustez con ruido real (criterio wearable; vista MIT, ensamble de 3 semillas, OOF).** La fila "limpio" coincide con la CV local (0.745 / SVEB F1 0.456 por semilla). Esto confirma que el híbrido de Colab es el mismo.
+
+| perturbación | F1-macro E20 → E21 | SVEB F1 E20 → E21 | VEB F1 E20 → E21 |
+|---|---|---|---|
+| limpio | 0.741 → **0.760** | 0.431 → **0.480** | 0.815 → **0.821** |
+| electrodo 12 dB | 0.714 → **0.736** | 0.405 → **0.438** | 0.765 → **0.794** |
+| músculo 12 dB | 0.658 → **0.667** | 0.300 → **0.362** | **0.701** → 0.668 |
+| deriva 12 dB | 0.710 → **0.722** | 0.376 → **0.419** | 0.778 → 0.774 |
+| mezcla 6 dB | 0.603 → **0.646** | 0.279 → **0.337** | 0.573 → **0.633** |
+| Polar H10 simulado | **0.680** → 0.673 | 0.338 → **0.364** | **0.727** → 0.684 |
+
+→ **Cumple el criterio wearable.** Con ruido real, E21 es igual o mejor que E20 en F1-macro y en SVEB F1, salvo en Polar simulado (−0.007).
+
+**DS1 → DS2 (literatura), ensamble, w y umbral elegidos en la validación interna de DS1:**
+
+| entrenamiento | modelo | SVEB Se / PPV / F1 | SVEB sin 232 Se / PPV | VEB Se / PPV |
+|---|---|---|---|---|
+| DS1 + INCART + SVDB | E20 (argmax) | **26.3 / 35.1 / 0.30** | **65.8 / 24.9** | **83.9 / 91.3** |
+| DS1 + INCART + SVDB | E21 (w = 0.50, argmax) | 11.7 / 20.2 / 0.15 | 47.2 / 20.0 | 80.5 / 83.9 |
+| DS1 + INCART + SVDB | solo RR-gbm | 6.5 / 8.3 / 0.07 | 26.6 / 8.3 | 65.7 / 64.0 |
+| solo DS1 MIT-BIH | E20 (argmax) | 5.0 / 16.2 / 0.08 | 19.2 / 15.4 | 77.5 / 89.5 |
+| solo DS1 MIT-BIH | E21 (w = 0.90, argmax) | 4.1 / 11.4 / 0.06 | 16.3 / 11.2 | 72.8 / 57.2 |
+
+→ **Empeora a E20 en DS2 en todas las métricas.** El modelo solo-RR no generaliza a los pacientes de DS2: su SVEB F1 es 0.07. La validación interna de DS1 tiene pocos sujetos y le dio a ese modelo un peso alto (w de 0.50 a 0.90).
+
+**Test fijo** (solo se reporta; ensamble con los umbrales de la CV):
+- **Completo:** SVEB Se 0.130 → 0.033 (otra vez el 232) y VEB PPV 0.889 → 0.975.
+- **Sin el 232** (61 SVEB): SVEB Se 0.033 → 0.098 y PPV 0.200 → 0.429.
+
+**Decisión final: E21 no se adopta y se mantiene E20.** Se había fijado de antemano la condición "en DS1→DS2 no empeora a E20", y no se cumple. La mejora en la CV y con ruido es real para pacientes cuya distribución de RR se parece a la del entrenamiento. Pero un modelo que solo ve las RR no transfiere a pacientes nuevos de otra base. Es justo lo contrario de lo que se esperaba de los métodos clásicos de RR, que además usan morfología. El código (`--hybrid`) y el modelo RR (`models/checkpoints/E21_rr_gbm.joblib`) quedan para reproducir.
